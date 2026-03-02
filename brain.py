@@ -1,0 +1,227 @@
+"""
+Protocol Zero — Brain (Core Reasoning Engine)
+==============================================
+Responsibilities:
+  1. Fetch recent OHLCV market data via CCXT.
+  2. Build a structured prompt with the data + trading context.
+  3. Call Amazon Bedrock (Nova Lite) to get a JSON decision.
+  4. Parse and validate the decision schema.
+
+Decision schema returned by the LLM:
+{
+    "action":  "BUY" | "SELL" | "HOLD",
+    "asset":   "BTC",
+    "amount":  0.01,
+    "reason":  "short human-readable rationale",
+    "confidence": 0.0 – 1.0
+}
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from datetime import datetime, timezone
+from typing import Any
+
+import boto3
+import ccxt
+import pandas as pd
+
+import config
+
+logger = logging.getLogger("protocol_zero.brain")
+
+# ────────────────────────────────────────────────────────────
+#  Market Data Fetcher
+# ────────────────────────────────────────────────────────────
+
+def fetch_market_data(
+    symbol: str = config.TRADING_PAIR,
+    timeframe: str = "1h",
+    limit: int = 48,
+) -> pd.DataFrame:
+    """
+    Pull the last *limit* candles from a public exchange via CCXT.
+    Returns a DataFrame with columns:
+        timestamp, open, high, low, close, volume
+    """
+    exchange = ccxt.binance({"enableRateLimit": True})   # no auth needed for public data
+    ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+
+    df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+
+    # ── Derive simple technical indicators ──────────────────
+    df["sma_12"] = df["close"].rolling(window=12).mean()
+    df["sma_26"] = df["close"].rolling(window=26).mean()
+    df["rsi_14"] = _compute_rsi(df["close"], 14)
+    df["pct_change"] = df["close"].pct_change() * 100  # % move per candle
+
+    logger.info("Fetched %d candles for %s (%s)", len(df), symbol, timeframe)
+    return df
+
+
+def _compute_rsi(series: pd.Series, period: int = 14) -> pd.Series:
+    """Relative Strength Index — classic Wilder smoothing."""
+    delta = series.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.rolling(window=period, min_periods=period).mean()
+    avg_loss = loss.rolling(window=period, min_periods=period).mean()
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
+
+# ────────────────────────────────────────────────────────────
+#  Prompt Builder
+# ────────────────────────────────────────────────────────────
+
+_SYSTEM_PROMPT = """\
+You are Protocol Zero — an autonomous DeFi trading agent.
+Your mandate is capital preservation first, profit second.
+
+You MUST reply with a single JSON object. No markdown, no explanation outside the JSON.
+
+Schema:
+{
+  "action":     "BUY" | "SELL" | "HOLD",
+  "asset":      "<TICKER>",
+  "amount_usd": <float>,
+  "reason":     "<one sentence>",
+  "confidence": <float 0.0-1.0>
+}
+
+Rules:
+- Never exceed the max trade size provided.
+- If uncertain, choose HOLD.
+- Base decisions on price momentum, RSI, SMA crossovers, and volume.
+"""
+
+
+def _build_user_prompt(df: pd.DataFrame, symbol: str, max_trade: float) -> str:
+    """Format the most recent data into a compact prompt."""
+    tail = df.tail(12).to_dict(orient="records")
+    # Serialize timestamps
+    for row in tail:
+        if isinstance(row.get("timestamp"), pd.Timestamp):
+            row["timestamp"] = row["timestamp"].isoformat()
+
+    return (
+        f"Current UTC time: {datetime.now(timezone.utc).isoformat()}\n"
+        f"Trading pair: {symbol}\n"
+        f"Max single trade: ${max_trade:.2f}\n\n"
+        f"Last 12 candles (1 h each):\n"
+        f"{json.dumps(tail, indent=2, default=str)}\n\n"
+        f"Latest close: ${df['close'].iloc[-1]:.2f}\n"
+        f"RSI-14: {df['rsi_14'].iloc[-1]:.1f}\n"
+        f"SMA-12: {df['sma_12'].iloc[-1]:.2f}  |  SMA-26: {df['sma_26'].iloc[-1]:.2f}\n\n"
+        "What is your trading decision?"
+    )
+
+
+# ────────────────────────────────────────────────────────────
+#  Bedrock Inference
+# ────────────────────────────────────────────────────────────
+
+def _get_bedrock_client() -> Any:
+    """Construct a boto3 Bedrock Runtime client."""
+    return boto3.client(
+        "bedrock-runtime",
+        region_name=config.AWS_DEFAULT_REGION,
+        aws_access_key_id=config.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=config.AWS_SECRET_ACCESS_KEY,
+    )
+
+
+def invoke_brain(
+    df: pd.DataFrame | None = None,
+    symbol: str = config.TRADING_PAIR,
+    max_trade: float = config.MAX_TRADE_USD,
+) -> dict:
+    """
+    End-to-end reasoning step:
+      1. Fetch market data (or use supplied df).
+      2. Build prompt.
+      3. Call Nova Lite on Bedrock.
+      4. Parse the JSON decision.
+
+    Returns
+    -------
+    dict  — validated decision with keys: action, asset, amount_usd, reason, confidence
+    """
+    if df is None:
+        df = fetch_market_data(symbol)
+
+    user_prompt = _build_user_prompt(df, symbol, max_trade)
+
+    # ── Bedrock Converse API (Nova Lite) ────────────────────
+    client = _get_bedrock_client()
+
+    response = client.converse(
+        modelId=config.BEDROCK_MODEL_ID,
+        messages=[
+            {
+                "role": "user",
+                "content": [{"text": f"{_SYSTEM_PROMPT}\n\n{user_prompt}"}],
+            }
+        ],
+        inferenceConfig={
+            "maxTokens": 512,
+            "temperature": 0.2,        # low temp → deterministic trading
+            "topP": 0.9,
+        },
+    )
+
+    raw_text: str = response["output"]["message"]["content"][0]["text"]
+    logger.debug("Raw Bedrock response:\n%s", raw_text)
+
+    decision = _parse_decision(raw_text)
+    return decision
+
+
+# ────────────────────────────────────────────────────────────
+#  Response Parser & Validator
+# ────────────────────────────────────────────────────────────
+
+_VALID_ACTIONS = {"BUY", "SELL", "HOLD"}
+
+
+def _parse_decision(raw: str) -> dict:
+    """
+    Extract the JSON decision from the LLM response.
+    Falls back to HOLD if parsing fails — never crash.
+    """
+    # Strip markdown code fences if the LLM wraps its answer
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[-1].rsplit("```", 1)[0]
+
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        logger.warning("Failed to parse LLM JSON — defaulting to HOLD.\nRaw: %s", raw)
+        return _default_hold()
+
+    # Validate required keys
+    action = str(data.get("action", "HOLD")).upper()
+    if action not in _VALID_ACTIONS:
+        action = "HOLD"
+
+    return {
+        "action":     action,
+        "asset":      str(data.get("asset", "BTC")),
+        "amount_usd": float(data.get("amount_usd", 0)),
+        "reason":     str(data.get("reason", "No reason provided")),
+        "confidence": min(max(float(data.get("confidence", 0)), 0.0), 1.0),
+    }
+
+
+def _default_hold() -> dict:
+    return {
+        "action":     "HOLD",
+        "asset":      "BTC",
+        "amount_usd": 0.0,
+        "reason":     "LLM parse failure — safety default",
+        "confidence": 0.0,
+    }
