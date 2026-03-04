@@ -7,13 +7,18 @@ Responsibilities:
   3. Call Amazon Bedrock (Nova Lite) to get a JSON decision.
   4. Parse and validate the decision schema.
 
-Decision schema returned by the LLM:
+Decision schema returned by the LLM (ERC-8004 compliant):
 {
-    "action":  "BUY" | "SELL" | "HOLD",
-    "asset":   "BTC",
-    "amount":  0.01,
-    "reason":  "short human-readable rationale",
-    "confidence": 0.0 – 1.0
+    "action":               "BUY" | "SELL" | "HOLD",
+    "asset":                "BTC",
+    "amount_usd":           <float>,
+    "reason":               "short human-readable rationale",
+    "confidence":           0.0 – 1.0,
+    "risk_score":           1 – 10,
+    "position_size_percent": 0.0 – 2.0,
+    "stop_loss_percent":    <float>,
+    "take_profit_percent":  <float>,
+    "market_regime":        "TRENDING" | "RANGING" | "VOLATILE" | "UNCERTAIN"
 }
 """
 
@@ -78,24 +83,34 @@ def _compute_rsi(series: pd.Series, period: int = 14) -> pd.Series:
 # ────────────────────────────────────────────────────────────
 
 _SYSTEM_PROMPT = """\
-You are Protocol Zero — an autonomous DeFi trading agent.
+You are Protocol Zero — an autonomous ERC-8004 compliant DeFi trading agent.
 Your mandate is capital preservation first, profit second.
 
 You MUST reply with a single JSON object. No markdown, no explanation outside the JSON.
 
 Schema:
 {
-  "action":     "BUY" | "SELL" | "HOLD",
-  "asset":      "<TICKER>",
-  "amount_usd": <float>,
-  "reason":     "<one sentence>",
-  "confidence": <float 0.0-1.0>
+  "action":               "BUY" | "SELL" | "HOLD",
+  "asset":                "<TICKER>",
+  "amount_usd":           <float — dollar amount for this trade>,
+  "reason":               "<one sentence rationale>",
+  "confidence":           <float 0.0-1.0>,
+  "risk_score":           <integer 1-10, where 1=safest 10=riskiest>,
+  "position_size_percent": <float 0.0-2.0 — percent of capital>,
+  "stop_loss_percent":    <float — e.g. 3.0 for 3% stop loss>,
+  "take_profit_percent":  <float — e.g. 6.0 for 6% take profit>,
+  "market_regime":        "TRENDING" | "RANGING" | "VOLATILE" | "UNCERTAIN"
 }
 
 Rules:
 - Never exceed the max trade size provided.
-- If uncertain, choose HOLD.
-- Base decisions on price momentum, RSI, SMA crossovers, and volume.
+- If uncertain, choose HOLD with confidence < 0.6.
+- Every BUY/SELL MUST have stop_loss_percent and take_profit_percent set > 0.
+- risk_score: 1-3 = low risk, 4-6 = moderate, 7-10 = high risk.
+- position_size_percent must never exceed 2.0.
+- Base decisions on price momentum, RSI, SMA crossovers, volume, and volatility.
+- Assess market_regime from the data: TRENDING (clear direction), RANGING (sideways),
+  VOLATILE (high variance), UNCERTAIN (mixed signals).
 """
 
 
@@ -107,15 +122,27 @@ def _build_user_prompt(df: pd.DataFrame, symbol: str, max_trade: float) -> str:
         if isinstance(row.get("timestamp"), pd.Timestamp):
             row["timestamp"] = row["timestamp"].isoformat()
 
+    # Compute volatility metrics for regime detection
+    volatility = df["close"].pct_change().rolling(20).std().iloc[-1]
+    vol_str = f"{volatility:.4f}" if pd.notna(volatility) else "N/A"
+
+    # Volume analysis
+    vol_24h = df["volume"].tail(24).mean()
+    vol_prev = df["volume"].tail(48).head(24).mean()
+    vol_change = ((vol_24h / vol_prev - 1) * 100) if vol_prev > 0 else 0
+
     return (
         f"Current UTC time: {datetime.now(timezone.utc).isoformat()}\n"
         f"Trading pair: {symbol}\n"
-        f"Max single trade: ${max_trade:.2f}\n\n"
+        f"Max single trade: ${max_trade:.2f}\n"
+        f"Total capital: ${config.TOTAL_CAPITAL_USD:,.2f}\n\n"
         f"Last 12 candles (1 h each):\n"
         f"{json.dumps(tail, indent=2, default=str)}\n\n"
         f"Latest close: ${df['close'].iloc[-1]:.2f}\n"
         f"RSI-14: {df['rsi_14'].iloc[-1]:.1f}\n"
-        f"SMA-12: {df['sma_12'].iloc[-1]:.2f}  |  SMA-26: {df['sma_26'].iloc[-1]:.2f}\n\n"
+        f"SMA-12: {df['sma_12'].iloc[-1]:.2f}  |  SMA-26: {df['sma_26'].iloc[-1]:.2f}\n"
+        f"20-period volatility: {vol_str}\n"
+        f"Volume trend: {vol_change:+.1f}% vs prior 24h\n\n"
         "What is your trading decision?"
     )
 
@@ -208,20 +235,35 @@ def _parse_decision(raw: str) -> dict:
     if action not in _VALID_ACTIONS:
         action = "HOLD"
 
+    # Parse market regime
+    regime = str(data.get("market_regime", "UNCERTAIN")).upper()
+    if regime not in {"TRENDING", "RANGING", "VOLATILE", "UNCERTAIN"}:
+        regime = "UNCERTAIN"
+
     return {
-        "action":     action,
-        "asset":      str(data.get("asset", "BTC")),
-        "amount_usd": float(data.get("amount_usd", 0)),
-        "reason":     str(data.get("reason", "No reason provided")),
-        "confidence": min(max(float(data.get("confidence", 0)), 0.0), 1.0),
+        "action":               action,
+        "asset":                str(data.get("asset", "BTC")),
+        "amount_usd":           float(data.get("amount_usd", 0)),
+        "reason":               str(data.get("reason", "No reason provided")),
+        "confidence":           min(max(float(data.get("confidence", 0)), 0.0), 1.0),
+        "risk_score":           min(10, max(1, int(data.get("risk_score", 5)))),
+        "position_size_percent": min(2.0, max(0.0, float(data.get("position_size_percent", 0)))),
+        "stop_loss_percent":    max(0.0, float(data.get("stop_loss_percent", 3.0))),
+        "take_profit_percent":  max(0.0, float(data.get("take_profit_percent", 6.0))),
+        "market_regime":        regime,
     }
 
 
 def _default_hold() -> dict:
     return {
-        "action":     "HOLD",
-        "asset":      "BTC",
-        "amount_usd": 0.0,
-        "reason":     "LLM parse failure — safety default",
-        "confidence": 0.0,
+        "action":               "HOLD",
+        "asset":                "BTC",
+        "amount_usd":           0.0,
+        "reason":               "LLM parse failure — safety default",
+        "confidence":           0.0,
+        "risk_score":           5,
+        "position_size_percent": 0.0,
+        "stop_loss_percent":    0.0,
+        "take_profit_percent":  0.0,
+        "market_regime":        "UNCERTAIN",
     }

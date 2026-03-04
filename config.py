@@ -42,8 +42,19 @@ IDENTITY_REGISTRY_ADDRESS   = _require("IDENTITY_REGISTRY_ADDRESS")
 REPUTATION_REGISTRY_ADDRESS = _require("REPUTATION_REGISTRY_ADDRESS")
 VALIDATION_REGISTRY_ADDRESS = _require("VALIDATION_REGISTRY_ADDRESS")
 
+# ── Additional ERC-8004 Contracts (optional) ───────────────
+VALIDATOR_ADDRESS       = os.getenv("VALIDATOR_ADDRESS", "")
+RISK_ROUTER_ADDRESS     = os.getenv("RISK_ROUTER_ADDRESS", "")
+CAPITAL_VAULT_ADDRESS   = os.getenv("CAPITAL_VAULT_ADDRESS", "")
+
 # ── Trading Parameters ─────────────────────────────────────
 MAX_TRADE_USD          = float(os.getenv("MAX_TRADE_USD", "500"))
 MAX_DAILY_LOSS_USD     = float(os.getenv("MAX_DAILY_LOSS_USD", "1000"))
 TRADING_PAIR           = os.getenv("TRADING_PAIR", "BTC/USDT")
 LOOP_INTERVAL_SECONDS  = int(os.getenv("LOOP_INTERVAL_SECONDS", "60"))
+TOTAL_CAPITAL_USD      = float(os.getenv("TOTAL_CAPITAL_USD", "10000"))
+
+# ── Agent Identity ──────────────────────────────────────────
+AGENT_NAME             = os.getenv("AGENT_NAME", "ProtocolZero")
+AGENT_HANDLE           = os.getenv("AGENT_HANDLE", "protocol-zero")
+AGENT_VERSION          = os.getenv("AGENT_VERSION", "1.0.0")

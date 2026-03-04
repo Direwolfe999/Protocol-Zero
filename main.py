@@ -1,19 +1,28 @@
 """
-Protocol Zero — Main Loop
-===========================
-Orchestrates the full agent lifecycle:
+Protocol Zero — Main Loop (ERC-8004 Compliant Pipeline)
+=========================================================
+Orchestrates the full agent lifecycle with real-time integration:
 
-  ┌──────────┐     ┌─────────┐     ┌──────────────┐     ┌───────────┐
-  │ Fetch    │ ──► │  Brain  │ ──► │ Risk Gate    │ ──► │ Execute   │
-  │ Market   │     │ (Nova)  │     │ (Limits +    │     │ (Sign +   │
-  │ Data     │     │         │     │  Confidence) │     │  Submit)  │
-  └──────────┘     └─────────┘     └──────────────┘     └───────────┘
-                                          │
-                                          ▼
-                                   ┌──────────────┐
-                                   │ Reputation   │
-                                   │ (Log PnL)    │
-                                   └──────────────┘
+  ┌──────────┐     ┌─────────┐     ┌──────────────┐     ┌───────────────┐
+  │ Fetch    │ ──► │  Brain  │ ──► │ Risk Check   │ ──► │ Validate +    │
+  │ Market   │     │ (Nova)  │     │ (6 checks)   │     │ Sign (EIP712) │
+  │ Data     │     │         │     │              │     │               │
+  └──────────┘     └─────────┘     └──────────────┘     └───────┬───────┘
+                                                                │
+                          ┌─────────────────────────────────────┤
+                          ▼                                     ▼
+                   ┌──────────────┐                 ┌───────────────────┐
+                   │ Validation   │                 │ Reputation        │
+                   │ Artifacts    │                 │ (giveFeedback)    │
+                   │ (keccak256)  │                 │                   │
+                   └──────────────┘                 └───────────────────┘
+                          │
+                          ▼
+                   ┌──────────────┐
+                   │ Performance  │
+                   │ Tracker      │
+                   │ (Sharpe etc) │
+                   └──────────────┘
 
 Usage:
     python main.py              # one-shot
@@ -33,6 +42,10 @@ from datetime import datetime, timezone
 import config
 from brain import fetch_market_data, invoke_brain
 from chain_interactor import ChainInteractor
+from risk_check import RiskState, run_all_checks, format_risk_report
+from sign_trade import validate_and_sign
+from performance_tracker import PerformanceTracker
+from validation_artifacts import ValidationArtifactBuilder
 
 # ── Logging setup ──────────────────────────────────────────
 logging.basicConfig(
@@ -44,85 +57,19 @@ logger = logging.getLogger("protocol_zero.main")
 
 
 # ════════════════════════════════════════════════════════════
-#  Risk Gate — local pre-flight checks BEFORE on-chain submit
-# ════════════════════════════════════════════════════════════
-
-class RiskGate:
-    """
-    Simple risk manager that tracks intra-session PnL and
-    enforces hard limits before any trade is signed.
-    """
-
-    def __init__(
-        self,
-        max_trade_usd: float = config.MAX_TRADE_USD,
-        max_daily_loss_usd: float = config.MAX_DAILY_LOSS_USD,
-        min_confidence: float = 0.40,
-    ) -> None:
-        self.max_trade_usd = max_trade_usd
-        self.max_daily_loss_usd = max_daily_loss_usd
-        self.min_confidence = min_confidence
-        self.session_pnl_usd: float = 0.0
-        self.trade_log: list[dict] = []
-
-    def check(self, decision: dict) -> tuple[bool, str]:
-        """
-        Validate a decision against risk limits.
-
-        Returns
-        -------
-        (passed: bool, reason: str)
-        """
-        action = decision["action"]
-
-        # HOLD always passes (no capital at risk)
-        if action == "HOLD":
-            return True, "HOLD — no action required."
-
-        # ── Confidence floor ───────────────────────────────
-        if decision["confidence"] < self.min_confidence:
-            return False, (
-                f"Confidence {decision['confidence']:.0%} < "
-                f"minimum {self.min_confidence:.0%}."
-            )
-
-        # ── Single-trade cap ──────────────────────────────
-        if decision["amount_usd"] > self.max_trade_usd:
-            return False, (
-                f"Amount ${decision['amount_usd']:.2f} exceeds "
-                f"max trade ${self.max_trade_usd:.2f}."
-            )
-
-        # ── Daily loss cap ────────────────────────────────
-        if self.session_pnl_usd <= -self.max_daily_loss_usd:
-            return False, (
-                f"Session PnL ${self.session_pnl_usd:.2f} hit "
-                f"daily loss limit -${self.max_daily_loss_usd:.2f}."
-            )
-
-        return True, "✅ Risk checks passed."
-
-    def record(self, decision: dict, pnl_usd: float = 0.0) -> None:
-        """Record a trade execution for session tracking."""
-        entry = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "action": decision["action"],
-            "asset": decision["asset"],
-            "amount_usd": decision["amount_usd"],
-            "pnl_usd": pnl_usd,
-        }
-        self.trade_log.append(entry)
-        self.session_pnl_usd += pnl_usd
-        logger.info("📒  Recorded trade — session PnL: $%.2f", self.session_pnl_usd)
-
-
-# ════════════════════════════════════════════════════════════
 #  Single Tick — one full decision cycle
 # ════════════════════════════════════════════════════════════
 
-def tick(chain: ChainInteractor, risk: RiskGate) -> dict | None:
+def tick(
+    chain: ChainInteractor,
+    risk_state: RiskState,
+    performance: PerformanceTracker,
+    artifact_builder: ValidationArtifactBuilder,
+) -> dict | None:
     """
-    Execute one cycle: fetch → reason → gate → sign → submit.
+    Execute one full cycle:
+      fetch → brain → risk_check → sign_trade → chain → validation_artifact → reputation → performance
+
     Returns the decision dict or None if skipped.
     """
     logger.info("═" * 60)
@@ -143,48 +90,103 @@ def tick(chain: ChainInteractor, risk: RiskGate) -> dict | None:
         return None
 
     logger.info(
-        "🧠  Decision: %s %s $%.2f (conf %.0f%%) — %s",
+        "🧠  Decision: %s %s $%.2f (conf %.0f%% risk %d regime %s) — %s",
         decision["action"],
         decision["asset"],
         decision["amount_usd"],
         decision["confidence"] * 100,
+        decision["risk_score"],
+        decision["market_regime"],
         decision["reason"],
     )
 
-    # 3 ── Risk Gate ───────────────────────────────────────
-    passed, gate_msg = risk.check(decision)
-    logger.info("🛡  Risk gate: %s", gate_msg)
+    # 3 ── Risk Check (6 checks) ──────────────────────────
+    risk_passed, risk_messages = run_all_checks(risk_state, decision)
+    logger.info("🛡  Risk gate: %s", "PASSED ✅" if risk_passed else "BLOCKED ⛔")
+    for msg in risk_messages:
+        logger.info("    %s", msg)
 
-    if not passed:
-        logger.warning("⛔  Trade BLOCKED by risk gate.")
+    if not risk_passed:
+        logger.warning("⛔  Trade BLOCKED by risk checks.")
+        # Still build validation artifact for audit trail
+        artifact_builder.build_artifact(
+            decision=decision,
+            market_data=df,
+            risk_results=(risk_passed, risk_messages),
+        )
         return decision
 
     # 4 ── HOLD shortcut (nothing to sign) ─────────────────
     if decision["action"] == "HOLD":
         logger.info("⏸  HOLD — no on-chain action.")
-        risk.record(decision)
+        risk_state.record_trade(decision.get("asset", ""), 0, 0)
+        artifact_builder.build_artifact(
+            decision=decision,
+            market_data=df,
+            risk_results=(risk_passed, risk_messages),
+        )
         return decision
 
-    # 5 ── Sign & submit intent on-chain ───────────────────
+    # 5 ── Validate & Sign (EIP-712) ──────────────────────
+    try:
+        sign_result = validate_and_sign(decision, broadcast=False)
+        if sign_result["status"] == "rejected":
+            logger.warning("⛔  Trade REJECTED by sign_trade validation:")
+            for err in sign_result["validation"]["errors"]:
+                logger.warning("    • %s", err)
+            return decision
+        logger.info("🔏  Trade signed successfully — signer: %s",
+                    sign_result.get("signed", {}).get("signer", "?"))
+    except Exception as exc:
+        logger.error("Sign/validate failed: %s", exc)
+        sign_result = None
+
+    # 6 ── Submit intent on-chain via Validation Registry ──
+    tx_hash = ""
     try:
         tx_hash = chain.submit_intent(decision)
         logger.info("🔗  Intent submitted — TX: %s", tx_hash)
     except Exception as exc:
         logger.error("On-chain submission failed: %s", exc)
-        return decision
 
-    # 6 ── Log to Reputation Registry ──────────────────────
+    # 7 ── Build validation artifact ──────────────────────
+    perf_report = performance.get_report()
+    artifact = artifact_builder.build_artifact(
+        decision=decision,
+        market_data=df,
+        risk_results=(risk_passed, risk_messages),
+        signed_intent=sign_result,
+        performance_report=perf_report,
+    )
+    logger.info("📋  Validation artifact: %s", artifact.artifact_id)
+
+    # 8 ── Log to Reputation Registry ──────────────────────
     try:
-        # PnL is unknown at submit time; log 0 bps — update later
         chain.log_trade_result(
             action_type=decision["action"],
-            pnl_bps=0,
+            pnl_bps=0,  # PnL unknown at submission — update later
             metadata=json.dumps(decision, default=str),
         )
     except Exception as exc:
         logger.warning("Reputation log failed (non-fatal): %s", exc)
 
-    risk.record(decision)
+    # 9 ── Record in performance tracker ──────────────────
+    performance.record_trade(
+        action=decision["action"],
+        asset=decision["asset"],
+        amount_usd=decision["amount_usd"],
+        pnl_usd=0.0,  # actual PnL resolved later
+        confidence=decision["confidence"],
+        risk_score=decision["risk_score"],
+        market_regime=decision["market_regime"],
+    )
+
+    # 10 ── Update risk state ─────────────────────────────
+    risk_state.record_trade(
+        decision["asset"],
+        decision["amount_usd"],
+    )
+
     return decision
 
 
@@ -193,10 +195,10 @@ def tick(chain: ChainInteractor, risk: RiskGate) -> dict | None:
 # ════════════════════════════════════════════════════════════
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Protocol Zero — Agentic DeFi Trading Bot")
+    parser = argparse.ArgumentParser(description="Protocol Zero — ERC-8004 Agentic DeFi Trading Bot")
     parser.add_argument("--loop", action="store_true", help="Run continuously")
     parser.add_argument("--register", action="store_true", help="Register agent on Identity Registry")
-    parser.add_argument("--handle", default="ProtocolZero", help="Agent handle for NFT")
+    parser.add_argument("--agent-uri", default="", help="Agent URI for ERC-8004 registration")
     args = parser.parse_args()
 
     # ── Connect to chain ──────────────────────────────────
@@ -209,22 +211,28 @@ def main() -> None:
     # ── One-time registration ─────────────────────────────
     if args.register:
         try:
-            chain.register_agent(handle=args.handle)
+            chain.register_agent(agent_uri=args.agent_uri)
         except Exception as exc:
             logger.error("Registration failed: %s", exc)
             sys.exit(1)
-        logger.info("🎉  Agent registered successfully.")
+        logger.info("🎉  Agent registered successfully on ERC-8004 Identity Registry.")
         return
 
-    # ── Risk gate ─────────────────────────────────────────
-    risk = RiskGate()
+    # ── Initialize subsystems ─────────────────────────────
+    risk_state = RiskState(
+        max_position_usd=config.MAX_TRADE_USD,
+        max_daily_loss_usd=config.MAX_DAILY_LOSS_USD,
+        total_capital_usd=config.TOTAL_CAPITAL_USD,
+    )
+    performance = PerformanceTracker(initial_capital=config.TOTAL_CAPITAL_USD)
+    artifact_builder = ValidationArtifactBuilder(chain_interactor=chain)
 
     # ── Main loop ─────────────────────────────────────────
     if args.loop:
         logger.info("🔄  Entering continuous loop (interval %ds)…", config.LOOP_INTERVAL_SECONDS)
         while True:
             try:
-                tick(chain, risk)
+                tick(chain, risk_state, performance, artifact_builder)
             except KeyboardInterrupt:
                 logger.info("🛑  Interrupted — shutting down.")
                 break
@@ -233,13 +241,11 @@ def main() -> None:
             time.sleep(config.LOOP_INTERVAL_SECONDS)
     else:
         # Single shot
-        tick(chain, risk)
+        tick(chain, risk_state, performance, artifact_builder)
 
     # ── Session summary ───────────────────────────────────
     logger.info("═" * 60)
-    logger.info("📊  Session summary: %d trades, PnL $%.2f", len(risk.trade_log), risk.session_pnl_usd)
-    for t in risk.trade_log:
-        logger.info("    %s %s $%.2f — PnL $%.2f", t["action"], t["asset"], t["amount_usd"], t["pnl_usd"])
+    logger.info(performance.format_report())
 
 
 if __name__ == "__main__":

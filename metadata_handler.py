@@ -64,13 +64,21 @@ DEFAULT_OUTPUT_PATH = Path(__file__).resolve().parent / "agent-identity.json"
 def generate_metadata(
     agent_name: str = "ProtocolZero",
     description: str = "Autonomous trust-minimized DeFi trading agent",
-    version: str = "0.1.0",
+    version: str = "1.0.0",
     capabilities: list[str] | None = None,
     agent_wallet_address: str | None = None,
     extra_fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
-    Build a fully compliant ERC-8004 agent identity metadata dict.
+    Build an ERC-8004 registration-v1 compliant agent identity metadata dict.
+
+    Follows the ERC-8004 specification for agent registration JSON:
+      - type: "erc8004:registration-v1"
+      - services: array of service descriptors
+      - registrations: array of registry references (agentRegistry format)
+      - supportedTrust: trust mechanisms supported
+      - x402Support: payment protocol support
+      - active: whether agent is currently active
 
     Parameters
     ----------
@@ -84,7 +92,7 @@ def generate_metadata(
 
     Returns
     -------
-    dict — the metadata document (without the hash; hash is added separately).
+    dict — the ERC-8004 compliant metadata document.
     """
     # Resolve agent address
     if agent_wallet_address is None:
@@ -100,38 +108,107 @@ def generate_metadata(
             "RISK_MANAGEMENT",
             "MARKET_ANALYSIS",
             "EIP712_SIGNING",
+            "AUTONOMOUS_EXECUTION",
         ]
 
     metadata: dict[str, Any] = {
-        # ── Core identity (ERC-8004 required) ─────────────
-        "name":            agent_name,
-        "description":     description,
-        "version":         version,
-        "agent_address":   agent_wallet_address,
+        # ── ERC-8004 registration-v1 required fields ──────
+        "type": "erc8004:registration-v1",
+        "name": agent_name,
+        "description": description,
+        "image": f"https://protocol-zero.agent/{config.AGENT_HANDLE}/avatar.png",
+        "version": version,
 
-        # ── Capabilities ──────────────────────────────────
-        "capabilities":    capabilities,
+        # ── Agent wallet ──────────────────────────────────
+        "agentAddress": agent_wallet_address,
 
-        # ── ERC-8004 registry references ──────────────────
-        "registries": {
-            "identity":    Web3.to_checksum_address(config.IDENTITY_REGISTRY_ADDRESS),
-            "reputation":  Web3.to_checksum_address(config.REPUTATION_REGISTRY_ADDRESS),
-            "validation":  Web3.to_checksum_address(config.VALIDATION_REGISTRY_ADDRESS),
+        # ── Services (ERC-8004 spec: what the agent can do) ─
+        "services": [
+            {
+                "type": "trading",
+                "name": "Autonomous DeFi Trading",
+                "description": "AI-driven spot trading with risk management",
+                "endpoint": f"https://protocol-zero.agent/{config.AGENT_HANDLE}/api/trade",
+                "capabilities": capabilities,
+                "pricing": {
+                    "model": "performance-fee",
+                    "rate": "0.1%",
+                    "currency": "USDT",
+                },
+            },
+            {
+                "type": "analysis",
+                "name": "Market Analysis",
+                "description": "Real-time market data analysis with AI reasoning",
+                "endpoint": f"https://protocol-zero.agent/{config.AGENT_HANDLE}/api/analyze",
+                "capabilities": ["MARKET_ANALYSIS", "RISK_ASSESSMENT"],
+            },
+        ],
+
+        # ── Registrations (ERC-8004 agentRegistry format) ─
+        "registrations": [
+            {
+                "registryType": "identity",
+                "chainId": config.CHAIN_ID,
+                "contractAddress": Web3.to_checksum_address(config.IDENTITY_REGISTRY_ADDRESS),
+                "standard": "ERC-8004",
+                "tokenType": "ERC-721",
+            },
+            {
+                "registryType": "reputation",
+                "chainId": config.CHAIN_ID,
+                "contractAddress": Web3.to_checksum_address(config.REPUTATION_REGISTRY_ADDRESS),
+                "standard": "ERC-8004",
+                "feedbackModel": "giveFeedback",
+            },
+            {
+                "registryType": "validation",
+                "chainId": config.CHAIN_ID,
+                "contractAddress": Web3.to_checksum_address(config.VALIDATION_REGISTRY_ADDRESS),
+                "standard": "ERC-8004",
+                "validationModel": "validationRequest/validationResponse",
+            },
+        ],
+
+        # ── Supported Trust Mechanisms ────────────────────
+        "supportedTrust": [
+            {
+                "type": "eip712-signature",
+                "description": "EIP-712 typed data signatures for trade intents",
+                "domain": "ProtocolZero",
+                "version": "1",
+            },
+            {
+                "type": "validation-artifact",
+                "description": "Keccak256-hashed validation artifacts with full audit trail",
+            },
+            {
+                "type": "on-chain-reputation",
+                "description": "Verifiable on-chain feedback via ERC-8004 Reputation Registry",
+            },
+        ],
+
+        # ── x402 Payment Support ──────────────────────────
+        "x402Support": {
+            "enabled": False,
+            "description": "HTTP 402 payment protocol — reserved for future use",
         },
 
+        # ── Active status ─────────────────────────────────
+        "active": True,
+
         # ── Chain info ────────────────────────────────────
-        "chain_id":        config.CHAIN_ID,
+        "chainId": config.CHAIN_ID,
 
         # ── Timestamps ────────────────────────────────────
-        "created_at":      datetime.now(timezone.utc).isoformat(),
-        "schema_version":  "ERC-8004-v1",
+        "createdAt": datetime.now(timezone.utc).isoformat(),
     }
 
     # Merge any extra fields the caller provides
     if extra_fields:
         metadata.update(extra_fields)
 
-    logger.info("📝  Generated metadata for agent '%s' (%s)", agent_name, agent_wallet_address)
+    logger.info("📝  Generated ERC-8004 metadata for agent '%s' (%s)", agent_name, agent_wallet_address)
     return metadata
 
 

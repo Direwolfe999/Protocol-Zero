@@ -29,36 +29,33 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from dotenv import load_dotenv
-
-load_dotenv()
+import config
 
 # ────────────────────────────────────────────────────────────
-#  Configuration
+#  Configuration — uses centralized config.py
 # ────────────────────────────────────────────────────────────
 
 CHAIN_MAP = {
     "anvil":   {"rpc": "http://127.0.0.1:8545", "chain_id": 31337},
-    "sepolia": {"rpc": os.getenv("RPC_URL", ""), "chain_id": 11155111},
+    "sepolia": {"rpc": config.RPC_URL, "chain_id": 11155111},
 }
 
-PRIVATE_KEY: str = os.getenv("AGENT_PRIVATE_KEY", "")
-TARGET_CHAIN: str = os.getenv("TARGET_CHAIN", "anvil").lower()
-VALIDATION_REGISTRY: str = os.getenv("VALIDATION_REGISTRY_ADDR", "")
+PRIVATE_KEY: str = config.PRIVATE_KEY
+TARGET_CHAIN: str = "sepolia" if config.CHAIN_ID == 11155111 else "anvil"
+VALIDATION_REGISTRY: str = config.VALIDATION_REGISTRY_ADDRESS
 
 # EIP-712 domain
 EIP712_DOMAIN = {
     "name":              "ProtocolZero",
     "version":           "1",
-    "chainId":           CHAIN_MAP.get(TARGET_CHAIN, CHAIN_MAP["anvil"])["chain_id"],
-    "verifyingContract": VALIDATION_REGISTRY or "0x0000000000000000000000000000000000000000",
+    "chainId":           config.CHAIN_ID,
+    "verifyingContract": config.VALIDATION_REGISTRY_ADDRESS,
 }
 
 # TradeIntent struct type for EIP-712
