@@ -173,12 +173,20 @@ def invoke_brain(
       3. Call Nova Lite on Bedrock.
       4. Parse the JSON decision.
 
+    Falls back to a rule-based engine when AWS credentials
+    are not yet configured (config.AWS_READY == False).
+
     Returns
     -------
     dict  — validated decision with keys: action, asset, amount_usd, reason, confidence
     """
     if df is None:
         df = fetch_market_data(symbol)
+
+    # ── Fallback: rule-based engine when AWS is unavailable ─
+    if not getattr(config, "AWS_READY", False):
+        logger.info("AWS credentials not ready — using rule-based fallback brain")
+        return _rule_based_decision(df, symbol, max_trade)
 
     user_prompt = _build_user_prompt(df, symbol, max_trade)
 
@@ -205,6 +213,102 @@ def invoke_brain(
 
     decision = _parse_decision(raw_text)
     return decision
+
+
+# ────────────────────────────────────────────────────────────
+#  Rule-Based Fallback (used when AWS creds are missing)
+# ────────────────────────────────────────────────────────────
+
+def _rule_based_decision(
+    df: pd.DataFrame, symbol: str, max_trade: float
+) -> dict:
+    """
+    Technical-indicator-driven decision engine.
+    Uses RSI, SMA crossover, and volatility to produce a trade decision
+    identical in schema to the Nova LLM output.
+    """
+    if df is None or len(df) < 26:
+        return _default_hold()
+
+    latest = df.iloc[-1]
+    price  = float(latest["close"])
+    rsi    = float(latest.get("rsi_14", 50)) if pd.notna(latest.get("rsi_14")) else 50.0
+    sma12  = float(latest.get("sma_12", price)) if pd.notna(latest.get("sma_12")) else price
+    sma26  = float(latest.get("sma_26", price)) if pd.notna(latest.get("sma_26")) else price
+    vol    = float(latest.get("volatility", 0.5)) if pd.notna(latest.get("volatility")) else 0.5
+
+    # Regime detection
+    if vol > 2.0:
+        regime = "VOLATILE"
+    elif abs(sma12 - sma26) / price > 0.01:
+        regime = "TRENDING"
+    elif vol < 0.5:
+        regime = "RANGING"
+    else:
+        regime = "UNCERTAIN"
+
+    # Decision logic
+    action = "HOLD"
+    reason = ""
+    confidence = 0.0
+    risk_score = 5
+
+    if rsi < 30 and sma12 > sma26:
+        action = "BUY"
+        confidence = min(0.85, (30 - rsi) / 30 + 0.4)
+        risk_score = 3
+        reason = f"RSI oversold ({rsi:.1f}) + bullish SMA crossover — buying opportunity"
+    elif rsi < 35 and regime != "VOLATILE":
+        action = "BUY"
+        confidence = 0.55
+        risk_score = 4
+        reason = f"RSI approaching oversold ({rsi:.1f}) in {regime} regime"
+    elif rsi > 70 and sma12 < sma26:
+        action = "SELL"
+        confidence = min(0.85, (rsi - 70) / 30 + 0.4)
+        risk_score = 3
+        reason = f"RSI overbought ({rsi:.1f}) + bearish SMA crossover — take profit"
+    elif rsi > 65 and regime == "VOLATILE":
+        action = "SELL"
+        confidence = 0.60
+        risk_score = 5
+        reason = f"RSI elevated ({rsi:.1f}) in volatile regime — risk reduction"
+    elif regime == "VOLATILE":
+        action = "HOLD"
+        confidence = 0.7
+        risk_score = 7
+        reason = f"High volatility ({vol:.2f}) — waiting for stability"
+    else:
+        action = "HOLD"
+        confidence = 0.5
+        risk_score = 5
+        reason = f"No clear signal — RSI {rsi:.1f}, regime {regime}"
+
+    # Position sizing
+    if action in ("BUY", "SELL"):
+        size_pct = min(2.0, confidence * 1.5)
+        amount = round(max_trade * size_pct / 100, 2)
+    else:
+        size_pct = 0.0
+        amount = 0.0
+
+    asset = symbol.split("/")[0] if "/" in symbol else symbol
+
+    logger.info("Rule-based decision: %s %s (conf=%.2f, RSI=%.1f, regime=%s)",
+                action, asset, confidence, rsi, regime)
+
+    return {
+        "action":               action,
+        "asset":                asset,
+        "amount_usd":           amount,
+        "reason":               f"[Rule Engine] {reason}",
+        "confidence":           round(confidence, 2),
+        "risk_score":           risk_score,
+        "position_size_percent": round(size_pct, 2),
+        "stop_loss_percent":    3.0,
+        "take_profit_percent":  6.0,
+        "market_regime":        regime,
+    }
 
 
 # ────────────────────────────────────────────────────────────

@@ -46,6 +46,7 @@ from risk_check import RiskState, run_all_checks, format_risk_report
 from sign_trade import validate_and_sign
 from performance_tracker import PerformanceTracker
 from validation_artifacts import ValidationArtifactBuilder
+from dex_executor import DexExecutor
 
 # ── Logging setup ──────────────────────────────────────────
 logging.basicConfig(
@@ -65,6 +66,7 @@ def tick(
     risk_state: RiskState,
     performance: PerformanceTracker,
     artifact_builder: ValidationArtifactBuilder,
+    dex: DexExecutor | None = None,
 ) -> dict | None:
     """
     Execute one full cycle:
@@ -149,6 +151,27 @@ def tick(
     except Exception as exc:
         logger.error("On-chain submission failed: %s", exc)
 
+    # 6b ── Execute DEX swap (Uniswap V3) ─────────────────
+    swap_result = None
+    if dex and dex.enabled:
+        try:
+            current_price = float(df["close"].iloc[-1]) if df is not None and len(df) > 0 else 0.0
+            swap_result = dex.execute_swap(decision, current_price)
+            if swap_result.success:
+                logger.info(
+                    "💱  DEX swap executed — TX: %s | In: %.6f %s → Out: %.6f %s | Gas: %.6f ETH",
+                    swap_result.tx_hash,
+                    swap_result.amount_in, swap_result.token_in,
+                    swap_result.amount_out, swap_result.token_out,
+                    swap_result.gas_cost_eth,
+                )
+            else:
+                logger.warning("⚠️  DEX swap failed: %s", swap_result.error)
+        except Exception as exc:
+            logger.error("DEX execution failed: %s", exc)
+    elif dex and not dex.enabled:
+        logger.info("💤  DEX execution disabled (set DEX_ENABLED=true to activate)")
+
     # 7 ── Build validation artifact ──────────────────────
     perf_report = performance.get_report()
     artifact = artifact_builder.build_artifact(
@@ -227,12 +250,28 @@ def main() -> None:
     performance = PerformanceTracker(initial_capital=config.TOTAL_CAPITAL_USD)
     artifact_builder = ValidationArtifactBuilder(chain_interactor=chain)
 
+    # ── DEX Executor (optional — controlled by DEX_ENABLED) ──
+    dex = None
+    try:
+        dex = DexExecutor()
+        if dex.enabled:
+            logger.info("💱  DEX Executor LIVE — swaps will execute on Uniswap V3")
+            balances = dex.get_balances()
+            logger.info("    Wallet: %s | ETH: %.4f | WETH: %.6f | USDC: %.2f",
+                        balances["wallet"], balances["eth"],
+                        balances["weth"], balances["usdc"])
+        else:
+            logger.info("💤  DEX Executor loaded but DISABLED (set DEX_ENABLED=true)")
+    except Exception as exc:
+        logger.warning("⚠️  DEX Executor unavailable: %s", exc)
+        dex = None
+
     # ── Main loop ─────────────────────────────────────────
     if args.loop:
         logger.info("🔄  Entering continuous loop (interval %ds)…", config.LOOP_INTERVAL_SECONDS)
         while True:
             try:
-                tick(chain, risk_state, performance, artifact_builder)
+                tick(chain, risk_state, performance, artifact_builder, dex=dex)
             except KeyboardInterrupt:
                 logger.info("🛑  Interrupted — shutting down.")
                 break
@@ -241,7 +280,7 @@ def main() -> None:
             time.sleep(config.LOOP_INTERVAL_SECONDS)
     else:
         # Single shot
-        tick(chain, risk_state, performance, artifact_builder)
+        tick(chain, risk_state, performance, artifact_builder, dex=dex)
 
     # ── Session summary ───────────────────────────────────
     logger.info("═" * 60)

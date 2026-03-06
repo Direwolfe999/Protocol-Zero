@@ -26,11 +26,21 @@ def _require(key: str) -> str:
     return val
 
 
+def _optional(key: str, default: str = "") -> str:
+    """Return an env var or a default — never crash."""
+    return os.getenv(key, default) or default
+
+
 # ── AWS / Bedrock ───────────────────────────────────────────
-AWS_ACCESS_KEY_ID      = _require("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY  = _require("AWS_SECRET_ACCESS_KEY")
-AWS_DEFAULT_REGION     = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-BEDROCK_MODEL_ID       = os.getenv("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
+#  Made optional so the dashboard can run without AWS while you
+#  finish account verification.  brain.py will fall back to
+#  rule-based logic when credentials are missing.
+AWS_ACCESS_KEY_ID      = _optional("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY  = _optional("AWS_SECRET_ACCESS_KEY")
+AWS_DEFAULT_REGION     = _optional("AWS_DEFAULT_REGION", "us-east-1")
+BEDROCK_MODEL_ID       = _optional("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
+AWS_READY              = bool(AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+                              and AWS_ACCESS_KEY_ID != "your_aws_access_key")
 
 # ── Blockchain ──────────────────────────────────────────────
 RPC_URL     = _require("RPC_URL")
@@ -53,6 +63,14 @@ MAX_DAILY_LOSS_USD     = float(os.getenv("MAX_DAILY_LOSS_USD", "1000"))
 TRADING_PAIR           = os.getenv("TRADING_PAIR", "BTC/USDT")
 LOOP_INTERVAL_SECONDS  = int(os.getenv("LOOP_INTERVAL_SECONDS", "60"))
 TOTAL_CAPITAL_USD      = float(os.getenv("TOTAL_CAPITAL_USD", "10000"))
+
+# ── DEX Execution (Uniswap V3 on Sepolia) ──────────────────
+DEX_ENABLED            = os.getenv("DEX_ENABLED", "false").lower() == "true"
+UNISWAP_ROUTER_ADDRESS = os.getenv("UNISWAP_ROUTER_ADDRESS", "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E")
+WETH_ADDRESS           = os.getenv("WETH_ADDRESS", "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14")
+USDC_ADDRESS           = os.getenv("USDC_ADDRESS", "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238")
+DEX_MAX_SLIPPAGE_PCT   = float(os.getenv("DEX_MAX_SLIPPAGE_PCT", "1.0"))
+DEX_POOL_FEE           = int(os.getenv("DEX_POOL_FEE", "3000"))   # 3000 = 0.3%
 
 # ── Agent Identity ──────────────────────────────────────────
 AGENT_NAME             = os.getenv("AGENT_NAME", "ProtocolZero")

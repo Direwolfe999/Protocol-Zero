@@ -76,6 +76,14 @@ try:
 except Exception:
     _HAS_SIGN = False
 
+try:
+    from dex_executor import DexExecutor
+    _DEX = DexExecutor()
+    _HAS_DEX = True
+except Exception:
+    _HAS_DEX = False
+    _DEX = None
+
 
 # ════════════════════════════════════════════════════════════
 #  Page Config
@@ -505,7 +513,76 @@ section[data-testid="stSidebar"] {
 .dec-box       { font-size: clamp(0.62rem, 1.6vw, 0.9rem); }
 .orb-label     { font-size: clamp(0.5rem, 1.5vw, 0.85rem); }
 .regime-orb    { width: clamp(45px, 12vw, 120px); height: clamp(45px, 12vw, 120px); }
+
+/* ══════════════════════════════════════════════════════════
+   COPY / SELECT PROTECTION
+   Disable casual text selection site-wide, but allow it
+   inside inputs, code blocks, JSON viewers, dataframes,
+   textareas, and the Streamlit expander content so that
+   TX hashes, wallet addresses, and raw JSON stay copyable.
+   ══════════════════════════════════════════════════════════ */
+.stApp {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+/* ── Whitelist: things that SHOULD remain selectable ── */
+input, textarea, [contenteditable="true"],
+pre, code, .stCodeBlock, .stCode,
+.stDataFrame, .stTable,
+[data-testid="stJson"],
+[data-testid="stExpander"] pre,
+[data-testid="stExpander"] code,
+.stTextInput input,
+.stNumberInput input,
+.stSelectbox input,
+.cog-stream,
+.stMarkdown a {
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    user-select: text !important;
+}
 </style>
+""", unsafe_allow_html=True)
+
+# ── JS: block right-click & common copy shortcuts ────────
+# Allows Ctrl-C inside whitelisted elements (inputs, code, etc.)
+st.markdown("""
+<script>
+(function(){
+  /* Tags / selectors where copying is allowed */
+  const ALLOW = ['INPUT','TEXTAREA','PRE','CODE'];
+  function isAllowed(el){
+      if(!el) return false;
+      if(ALLOW.includes(el.tagName)) return true;
+      if(el.isContentEditable) return true;
+      if(el.closest('pre,code,.stCodeBlock,.stCode,.stDataFrame,.stTable,[data-testid="stJson"],.cog-stream')) return true;
+      return false;
+  }
+
+  /* Block right-click everywhere except whitelisted */
+  document.addEventListener('contextmenu', function(e){
+      if(!isAllowed(e.target)) e.preventDefault();
+  }, true);
+
+  /* Block Ctrl+C / Ctrl+U / Ctrl+S outside whitelisted */
+  document.addEventListener('keydown', function(e){
+      if(e.ctrlKey || e.metaKey){
+          if(e.key==='u' || e.key==='s'){          /* view-source / save */
+              e.preventDefault();
+          }
+          if(e.key==='c' && !isAllowed(document.activeElement)){
+              var sel = window.getSelection();
+              var anchor = sel && sel.anchorNode ? (sel.anchorNode.nodeType===3 ? sel.anchorNode.parentElement : sel.anchorNode) : null;
+              if(!isAllowed(anchor)) e.preventDefault();
+          }
+      }
+  }, true);
+})();
+</script>
 """, unsafe_allow_html=True)
 
 
@@ -564,6 +641,13 @@ _DEFAULTS: dict[str, Any] = {
 
     # ── Calibration ────────────────────────────────────
     "calibration_data":    [],  # list of {predicted_conf, actual_outcome}
+
+    # ── DEX / Wallet ──────────────────────────────────
+    "dex_enabled":         _HAS_DEX and getattr(_DEX, 'enabled', False),
+    "wallet_eth":          0.0,
+    "wallet_weth":         0.0,
+    "wallet_usdc":         0.0,
+    "last_swap_result":    None,
 }
 
 for _k, _v in _DEFAULTS.items():
@@ -685,6 +769,28 @@ def _real_execute_trade(decision: dict, df: pd.DataFrame) -> dict:
             result["success"] = True
         except Exception as e:
             result["error"] = f"Chain submission error: {e}"
+
+    # Step 3b: DEX swap (Uniswap V3 — real token execution)
+    if _HAS_DEX and _DEX is not None and _DEX.enabled:
+        try:
+            current_price = float(df["close"].iloc[-1]) if df is not None and len(df) > 0 else 0.0
+            swap = _DEX.execute_swap(decision, current_price)
+            result["swap"] = swap.to_dict()
+            if swap.success:
+                result["success"] = True
+                result["tx"] = swap.tx_hash or result.get("tx")
+                # Update wallet balances in session
+                try:
+                    bals = _DEX.get_balances()
+                    st.session_state["wallet_eth"] = bals["eth"]
+                    st.session_state["wallet_weth"] = bals["weth"]
+                    st.session_state["wallet_usdc"] = bals["usdc"]
+                except Exception:
+                    pass
+            else:
+                result["swap_error"] = swap.error
+        except Exception as e:
+            result["swap_error"] = f"DEX error: {e}"
 
     # Step 4: Build validation artifact
     if _HAS_ARTIFACTS and _ARTIFACTS is not None:
@@ -1255,7 +1361,7 @@ with st.sidebar:
              else '<span class="badge badge-gold">Unregistered</span>')
     st.markdown(f"ERC-8004: {badge}", unsafe_allow_html=True)
 
-    if st.button("🔗  Register On-Chain", use_container_width=True, type="primary"):
+    if st.button("🔗  Register On-Chain", width="stretch", type="primary"):
         with st.spinner("Minting Identity NFT on ERC-8004 Registry…"):
             _cog("▣", "Identity NFT mint initiated", "ok")
             reg_result = _real_register_agent()
@@ -1328,12 +1434,12 @@ with st.sidebar:
             <div style="font-size:0.7rem;color:#ff9999;margin-top:2px">
                 Kill switch is ACTIVE — no trades will execute</div>
         </div>""", unsafe_allow_html=True)
-        if st.button("✅  Resume Trading", use_container_width=True):
+        if st.button("✅  Resume Trading", width="stretch"):
             st.session_state["kill_switch_active"] = False
             _cog("✅", "Kill switch deactivated — trading resumed", "ok")
             st.rerun()
     else:
-        if st.button("🚨  EMERGENCY STOP", use_container_width=True, type="primary"):
+        if st.button("🚨  EMERGENCY STOP", width="stretch", type="primary"):
             st.session_state["kill_switch_active"] = True
             st.session_state["autonomous_mode"] = False
             _cog("⛔", "KILL SWITCH ACTIVATED — all trading halted", "err")
@@ -1355,6 +1461,37 @@ with st.sidebar:
         "RSI Oversold Halt", 5, 40,
         st.session_state["rsi_halt_low"], 1,
         help="RSI below this triggers HOLD.")
+
+    st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
+
+    # ── DEX Wallet ───────────────────────────────────────
+    st.markdown("### 💱 DEX Wallet")
+    if _HAS_DEX and _DEX is not None:
+        dex_on = st.session_state.get("dex_enabled", False)
+        dex_icon = "🟢" if dex_on else "🔴"
+        st.markdown(f"{dex_icon} **Uniswap V3** — {'Enabled' if dex_on else 'Disabled'}")
+        try:
+            _sb = _DEX.get_balances()
+            st.session_state["wallet_eth"] = _sb.get("eth", 0.0)
+            st.session_state["wallet_weth"] = _sb.get("weth", 0.0)
+            st.session_state["wallet_usdc"] = _sb.get("usdc", 0.0)
+        except Exception:
+            pass
+        st.markdown(
+            f'<div class="mcard">'
+            f'<div class="lbl">Wallet Balances</div>'
+            f'<div style="font-size:0.75rem;color:#a78bfa;margin-top:4px">'
+            f'Ξ {st.session_state.get("wallet_eth", 0):.6f} ETH</div>'
+            f'<div style="font-size:0.75rem;color:#60a5fa;margin-top:2px">'
+            f'Ξ {st.session_state.get("wallet_weth", 0):.6f} WETH</div>'
+            f'<div style="font-size:0.75rem;color:#34d399;margin-top:2px">'
+            f'$ {st.session_state.get("wallet_usdc", 0):.2f} USDC</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown("🔴 **DEX not connected**")
+        st.caption("Set DEX_ENABLED=true in .env and add a funded wallet.")
 
 
 # ════════════════════════════════════════════════════════════
@@ -1473,7 +1610,7 @@ with tab_market:
             df = st.session_state["market_df"]
     with col_ref:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🔄 Refresh", use_container_width=True):
+        if st.button("🔄 Refresh", width="stretch"):
             df = load_market_data(st.session_state["selected_pair"])
 
     latest  = df["close"].iloc[-1]
@@ -1521,7 +1658,7 @@ with tab_market:
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         yaxis=dict(gridcolor="#111130"), xaxis=dict(gridcolor="#111130"),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     with st.expander("📊 Volume Profile"):
         fig_v = go.Figure()
@@ -1535,7 +1672,7 @@ with tab_market:
             height=180, margin=dict(l=0, r=0, t=10, b=0),
             yaxis=dict(gridcolor="#111130"), xaxis=dict(gridcolor="#111130"),
         )
-        st.plotly_chart(fig_v, use_container_width=True)
+        st.plotly_chart(fig_v, width="stretch")
 
 
 # ──────────────────────────────────────────────────────────
@@ -1548,7 +1685,7 @@ with tab_brain:
 
     col_r, _spacer = st.columns([1, 3])
     with col_r:
-        run_ai = st.button("▶  Run Analysis", use_container_width=True,
+        run_ai = st.button("▶  Run Analysis", width="stretch",
                             type="primary")
 
     if run_ai:
@@ -1615,7 +1752,7 @@ with tab_brain:
         col_gauge, col_bar = st.columns([1, 2])
         with col_gauge:
             st.plotly_chart(confidence_gauge(dec["confidence"]),
-                           use_container_width=True)
+                           width="stretch")
         with col_bar:
             # Confidence bar (kept from v2)
             cp = dec["confidence"] * 100
@@ -1645,7 +1782,7 @@ with tab_brain:
     if st.session_state["decision_history"]:
         with st.expander(f"📜 Decision History ({len(st.session_state['decision_history'])})"):
             st.dataframe(pd.DataFrame(st.session_state["decision_history"]),
-                         use_container_width=True, hide_index=True)
+                         width="stretch", hide_index=True)
 
 
 # ──────────────────────────────────────────────────────────
@@ -1678,7 +1815,7 @@ with tab_risk:
     st.caption("Dry-run the trade locally — see expected gas and final balance before spending real Coins.")
     sim_dec = st.session_state.get("latest_decision")
     if sim_dec and sim_dec["action"] != "HOLD":
-        if st.button("🧪  Simulate Trade", use_container_width=True):
+        if st.button("🧪  Simulate Trade", width="stretch"):
             sim = simulate_trade(sim_dec, st.session_state["total_capital_usd"])
             _cog("🧪", f"Simulation: gas={sim['gas_gwei']}gwei "
                  f"slip={sim['slippage_pct']}% net=${sim['net_amount']}", "info")
@@ -1814,7 +1951,7 @@ with tab_risk:
                 execute = True
         else:
             execute = st.button("🔏  Sign & Execute Trade",
-                                use_container_width=True, type="primary",
+                                width="stretch", type="primary",
                                 disabled=(not all_passed
                                           or st.session_state["kill_switch_active"]))
 
@@ -1843,6 +1980,24 @@ with tab_risk:
                     if exec_result.get("error"):
                         _cog("⚠", f"Chain: {exec_result['error']}", "warn")
                     _cog("▣", f"Local TX ref: {tx[:22]}…", "sym")
+
+                # ── DEX swap cognitive stream entries ────────
+                swap_info = exec_result.get("swap")
+                if swap_info and isinstance(swap_info, dict):
+                    st.session_state["last_swap_result"] = swap_info
+                    if swap_info.get("success"):
+                        _cog("💱", f"DEX Swap SUCCESS: "
+                             f"{swap_info.get('amount_in', 0):.6f} {swap_info.get('token_in', '?')}"
+                             f" → {swap_info.get('amount_out', 0):.6f} {swap_info.get('token_out', '?')}", "ok")
+                        _cog("⛽", f"Gas used: {swap_info.get('gas_used', 0)} | "
+                             f"Gas cost: {swap_info.get('gas_cost_eth', 0):.6f} ETH", "info")
+                        stx = swap_info.get("tx_hash", "")
+                        if stx:
+                            _cog("🔗", f"Etherscan: https://sepolia.etherscan.io/tx/{stx}", "ok")
+                    else:
+                        _cog("❌", f"DEX Swap FAILED: {swap_info.get('error', 'unknown')}", "err")
+                elif exec_result.get("swap_error"):
+                    _cog("⚠", f"DEX: {exec_result['swap_error']}", "warn")
 
                 if exec_result.get("risk_report"):
                     _cog("▣", "Risk report generated", "ok")
@@ -1880,6 +2035,14 @@ with tab_risk:
                      f"{st.session_state['reputation_score']}",
                      "ok" if pnl > 0 else "warn")
 
+                # Determine swap status label for tx_log
+                _swap_data = exec_result.get("swap")
+                _dex_label = ""
+                if _swap_data and isinstance(_swap_data, dict) and _swap_data.get("success"):
+                    _dex_label = " + 💱 DEX Swap"
+                elif _swap_data and isinstance(_swap_data, dict):
+                    _dex_label = " + ❌ DEX Failed"
+
                 st.session_state["tx_log"].append({
                     "timestamp":  datetime.now(timezone.utc).strftime("%H:%M:%S"),
                     "action":     dec["action"],
@@ -1888,13 +2051,17 @@ with tab_risk:
                     "confidence": f"{dec['confidence']:.0%}",
                     "risk":       f"{dec['risk_score']}/10",
                     "pnl":        f"${pnl:+.2f}",
-                    "status":     "✅ On-Chain" if exec_result["success"] else "⚠️ Local",
+                    "status":     ("✅ On-Chain" if exec_result["success"] else "⚠️ Local") + _dex_label,
                     "tx_hash":    tx[:20] + "…",
                     "etherscan":  f"https://sepolia.etherscan.io/tx/{tx}",
                 })
 
             status_label = "on-chain" if exec_result["success"] else "locally"
-            st.success(f"Trade executed {status_label}! TX: `{tx[:28]}…` · PnL: **${pnl:+.2f}**")
+            dex_msg = ""
+            _sw = exec_result.get("swap")
+            if _sw and isinstance(_sw, dict) and _sw.get("success"):
+                dex_msg = f" · 💱 DEX Swap: {_sw.get('amount_in', 0):.6f} {_sw.get('token_in', '')} → {_sw.get('amount_out', 0):.6f} {_sw.get('token_out', '')}"
+            st.success(f"Trade executed {status_label}! TX: `{tx[:28]}…` · PnL: **${pnl:+.2f}**{dex_msg}")
             if pnl > 0:
                 st.balloons()
             st.rerun()
@@ -1922,7 +2089,7 @@ with tab_log:
 
     if st.session_state["tx_log"]:
         log_df = pd.DataFrame(st.session_state["tx_log"])
-        st.dataframe(log_df, use_container_width=True, hide_index=True,
+        st.dataframe(log_df, width="stretch", hide_index=True,
                      column_config={
                          "timestamp":  st.column_config.TextColumn("Time",    width="small"),
                          "action":     st.column_config.TextColumn("Action",  width="small"),
@@ -2001,7 +2168,7 @@ with tab_pnl:
         # P&L Chart
         fig = pnl_chart(st.session_state["tx_log"])
         if fig:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
         # Spent vs Portfolio bar
         fig_bar = go.Figure()
@@ -2019,7 +2186,7 @@ with tab_pnl:
             height=200, margin=dict(l=0, r=0, t=10, b=0),
             yaxis=dict(gridcolor="#111130"),
         )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_bar, width="stretch")
     else:
         st.markdown(
             '<div style="text-align:center;padding:3rem;color:#495670">'
@@ -2194,7 +2361,7 @@ with tab_trust:
             yaxis=dict(gridcolor="#111130", range=[0, 105], title="Trust Score"),
             xaxis=dict(gridcolor="#111130"),
         )
-        st.plotly_chart(fig_trust, use_container_width=True)
+        st.plotly_chart(fig_trust, width="stretch")
 
     st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 
@@ -2217,6 +2384,7 @@ with tab_trust:
         ("Validation Artifacts", _HAS_ARTIFACTS),
         ("Risk Check", _HAS_RISK),
         ("Sign Trade", _HAS_SIGN),
+        ("DEX Executor", _HAS_DEX),
     ]
     cols = st.columns(len(modules))
     for i, (name, connected) in enumerate(modules):
@@ -2226,6 +2394,72 @@ with tab_trust:
                 <div class="lbl">{name}</div>
                 <div class="val" style="font-size:1rem">{icon}</div>
             </div>""", unsafe_allow_html=True)
+
+    st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
+
+    # ── DEX Wallet Balances ────────────────────────────
+    st.markdown("#### 💰 DEX Wallet Balances")
+    if _HAS_DEX and _DEX is not None:
+        try:
+            _bal = _DEX.get_balances()
+            st.session_state["wallet_eth"] = _bal.get("eth", 0.0)
+            st.session_state["wallet_weth"] = _bal.get("weth", 0.0)
+            st.session_state["wallet_usdc"] = _bal.get("usdc", 0.0)
+        except Exception:
+            pass
+    dex_status_icon = "🟢 ENABLED" if st.session_state.get("dex_enabled") else "🔴 DISABLED"
+    dex_sc = "#64ffda" if st.session_state.get("dex_enabled") else "#ff6b6b"
+    wc1, wc2, wc3, wc4 = st.columns(4)
+    with wc1:
+        st.markdown(f"""<div class="mcard">
+            <div class="lbl">DEX Status</div>
+            <div class="val" style="color:{dex_sc};font-size:0.9rem">{dex_status_icon}</div>
+        </div>""", unsafe_allow_html=True)
+    with wc2:
+        eth_bal = st.session_state.get("wallet_eth", 0.0)
+        st.markdown(f"""<div class="mcard">
+            <div class="lbl">ETH Balance</div>
+            <div class="val" style="color:#a78bfa">{eth_bal:.6f}</div>
+        </div>""", unsafe_allow_html=True)
+    with wc3:
+        weth_bal = st.session_state.get("wallet_weth", 0.0)
+        st.markdown(f"""<div class="mcard">
+            <div class="lbl">WETH Balance</div>
+            <div class="val" style="color:#60a5fa">{weth_bal:.6f}</div>
+        </div>""", unsafe_allow_html=True)
+    with wc4:
+        usdc_bal = st.session_state.get("wallet_usdc", 0.0)
+        st.markdown(f"""<div class="mcard">
+            <div class="lbl">USDC Balance</div>
+            <div class="val" style="color:#34d399">{usdc_bal:.2f}</div>
+        </div>""", unsafe_allow_html=True)
+
+    # Recent DEX Swap Result
+    last_swap = st.session_state.get("last_swap_result")
+    if last_swap and isinstance(last_swap, dict):
+        st.markdown("#### 🔄 Last DEX Swap")
+        swap_color = "#64ffda" if last_swap.get("success") else "#ff6b6b"
+        swap_status = "✅ SUCCESS" if last_swap.get("success") else "❌ FAILED"
+        sc1, sc2, sc3 = st.columns(3)
+        with sc1:
+            st.markdown(f"""<div class="mcard">
+                <div class="lbl">Swap Status</div>
+                <div class="val" style="color:{swap_color};font-size:0.9rem">{swap_status}</div>
+            </div>""", unsafe_allow_html=True)
+        with sc2:
+            pair = f"{last_swap.get('token_in','?')} → {last_swap.get('token_out','?')}"
+            st.markdown(mcard("Pair", pair), unsafe_allow_html=True)
+        with sc3:
+            tx = last_swap.get("tx_hash", "—")
+            short_tx = f"{tx[:10]}…{tx[-8:]}" if len(str(tx)) > 20 else str(tx)
+            st.markdown(mcard("TX Hash", short_tx), unsafe_allow_html=True)
+        sd1, sd2, sd3 = st.columns(3)
+        with sd1:
+            st.markdown(mcard("Amount In", f"{last_swap.get('amount_in', 0):.6f}"), unsafe_allow_html=True)
+        with sd2:
+            st.markdown(mcard("Amount Out", f"{last_swap.get('amount_out', 0):.6f}"), unsafe_allow_html=True)
+        with sd3:
+            st.markdown(mcard("Gas Cost (ETH)", f"{last_swap.get('gas_cost_eth', 0):.6f}"), unsafe_allow_html=True)
 
 
 # ──────────────────────────────────────────────────────────
@@ -2317,7 +2551,7 @@ with tab_perf:
             yaxis=dict(gridcolor="#111130", title="Portfolio Value ($)"),
             xaxis=dict(gridcolor="#111130", title="Trade #"),
         )
-        st.plotly_chart(fig_eq, use_container_width=True)
+        st.plotly_chart(fig_eq, width="stretch")
     else:
         st.info("Execute trades to build the equity curve.")
 
@@ -2338,7 +2572,7 @@ with tab_perf:
             yaxis=dict(gridcolor="#111130", title="Volatility"),
             xaxis=dict(gridcolor="#111130"),
         )
-        st.plotly_chart(fig_rv, use_container_width=True)
+        st.plotly_chart(fig_rv, width="stretch")
 
     # ── Regime Breakdown ───────────────────────────────
     st.markdown("#### 🎯 Performance by Market Regime")
@@ -2356,7 +2590,7 @@ with tab_perf:
             height=250, margin=dict(l=0, r=0, t=10, b=0),
             yaxis=dict(gridcolor="#111130"), xaxis=dict(gridcolor="#111130"),
         )
-        st.plotly_chart(fig_regime, use_container_width=True)
+        st.plotly_chart(fig_regime, width="stretch")
     else:
         st.info("Trade across different market regimes to see regime-specific performance.")
 
@@ -2479,7 +2713,7 @@ with tab_calib:
             yaxis=dict(gridcolor="#111130", title="Rate (%)", range=[0, 105]),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         )
-        st.plotly_chart(fig_cal, use_container_width=True)
+        st.plotly_chart(fig_cal, width="stretch")
 
         # ── Calibration Metrics ────────────────────────
         st.markdown("#### 📊 Calibration Metrics")
@@ -2528,7 +2762,7 @@ with tab_calib:
             xaxis=dict(gridcolor="#111130", title="AI Confidence %"),
             yaxis=dict(gridcolor="#111130", title="PnL ($)"),
         )
-        st.plotly_chart(fig_scatter, use_container_width=True)
+        st.plotly_chart(fig_scatter, width="stretch")
 
     else:
         needed = 3 - len(cal_data)
@@ -2575,7 +2809,7 @@ with tab_micro:
             yaxis=dict(gridcolor="#111130", title="Volatility"),
             xaxis=dict(gridcolor="#111130", title="Lookback Window"),
         )
-        st.plotly_chart(fig_vol, use_container_width=True)
+        st.plotly_chart(fig_vol, width="stretch")
 
         # ── Volume Profile Heatmap ─────────────────────
         st.markdown("#### 🔥 Volume Profile Heatmap")
@@ -2614,7 +2848,7 @@ with tab_micro:
             xaxis=dict(gridcolor="#111130", title="Volume"),
             yaxis=dict(gridcolor="#111130"),
         )
-        st.plotly_chart(fig_vp, use_container_width=True)
+        st.plotly_chart(fig_vp, width="stretch")
 
         # ── Regime Transition Matrix ───────────────────
         st.markdown("#### 🔄 Regime Transition Analysis")
@@ -2648,7 +2882,7 @@ with tab_micro:
                 height=300, margin=dict(l=0, r=0, t=10, b=0),
                 xaxis=dict(title="To Regime"), yaxis=dict(title="From Regime"),
             )
-            st.plotly_chart(fig_trans, use_container_width=True)
+            st.plotly_chart(fig_trans, width="stretch")
 
         # ── Price Return Distribution ──────────────────
         st.markdown("#### 📊 Return Distribution")
@@ -2671,7 +2905,7 @@ with tab_micro:
                 xaxis=dict(gridcolor="#111130", title="Return %"),
                 yaxis=dict(gridcolor="#111130", title="Frequency"),
             )
-            st.plotly_chart(fig_dist, use_container_width=True)
+            st.plotly_chart(fig_dist, width="stretch")
 
             # Stats
             ms1, ms2, ms3, ms4 = st.columns(4)
@@ -2706,6 +2940,6 @@ st.markdown("""
     Protocol Zero v2.0 &nbsp;·&nbsp; Autonomous Agent &nbsp;·&nbsp;
     ERC-8004 Compliant &nbsp;·&nbsp; EIP-712 Signed Intents &nbsp;·&nbsp;
     Nova Lite (Bedrock) &nbsp;·&nbsp; On-Chain Trust &nbsp;·&nbsp;
-    Validation Artifacts &nbsp;·&nbsp; Hackathon 2025
+    Validation Artifacts &nbsp;·&nbsp; Hackathon 2025/2026
 </div>
 """, unsafe_allow_html=True)
