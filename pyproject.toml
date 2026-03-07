@@ -1,0 +1,23 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+markers = [
+    "unit: pure logic tests with no external dependencies",
+    "integration: tests requiring chain / API connectivity",
+]
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "tests/*",
+    ".venv/*",
+    "__pycache__/*",
+    "dashboard.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 40
