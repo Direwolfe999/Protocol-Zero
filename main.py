@@ -42,6 +42,7 @@ from datetime import datetime, timezone
 import config
 from brain import fetch_market_data, invoke_brain
 from chain_interactor import ChainInteractor
+from exceptions import MarketDataError, BrainError, ChainError, ProtocolZeroError
 from risk_check import RiskState, run_all_checks, format_risk_report
 from sign_trade import validate_and_sign
 from performance_tracker import PerformanceTracker
@@ -80,15 +81,21 @@ def tick(
     # 1 ── Fetch market data ────────────────────────────────
     try:
         df = fetch_market_data()
+    except MarketDataError as exc:
+        logger.error("Market data fetch failed: %s (details: %s)", exc, exc.details)
+        return None
     except Exception as exc:
-        logger.error("Market data fetch failed: %s", exc)
+        logger.error("Unexpected error fetching market data: %s", exc)
         return None
 
     # 2 ── Ask the Brain ───────────────────────────────────
     try:
         decision = invoke_brain(df=df)
+    except BrainError as exc:
+        logger.error("Brain invocation failed: %s (details: %s)", exc, exc.details)
+        return None
     except Exception as exc:
-        logger.error("Brain invocation failed: %s", exc)
+        logger.error("Unexpected brain error: %s", exc)
         return None
 
     logger.info(
@@ -227,8 +234,11 @@ def main() -> None:
     # ── Connect to chain ──────────────────────────────────
     try:
         chain = ChainInteractor()
-    except Exception as exc:
+    except (ChainError, ProtocolZeroError) as exc:
         logger.critical("Chain connection failed: %s", exc)
+        sys.exit(1)
+    except Exception as exc:
+        logger.critical("Unexpected chain error: %s", exc)
         sys.exit(1)
 
     # ── One-time registration ─────────────────────────────

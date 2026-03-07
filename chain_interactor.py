@@ -30,6 +30,7 @@ from web3 import Web3
 from web3.middleware import ExtraDataToPOAMiddleware
 
 import config
+from exceptions import ChainError, RegistryError, TransactionError
 
 logger = logging.getLogger("protocol_zero.chain")
 
@@ -242,7 +243,10 @@ class ChainInteractor:
         self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
 
         if not self.w3.is_connected():
-            raise ConnectionError(f"Cannot reach RPC: {config.RPC_URL}")
+            raise ChainError(
+                f"Cannot reach RPC: {config.RPC_URL}",
+                details={"rpc_url": config.RPC_URL},
+            )
         logger.info("🔗  Connected to chain %s (block %s)", config.CHAIN_ID, self.w3.eth.block_number)
 
         # ── Wallet ────────────────────────────────────────
@@ -291,7 +295,10 @@ class ChainInteractor:
         # Wait for receipt (timeout 120 s)
         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt["status"] != 1:
-            raise RuntimeError(f"TX reverted: {tx_hash.hex()}")
+            raise TransactionError(
+                f"TX reverted: {tx_hash.hex()}",
+                details={"tx_hash": tx_hash.hex(), "block": receipt.get("blockNumber")},
+            )
         logger.info("✅  TX confirmed in block %s", receipt["blockNumber"])
         return tx_hash.hex()
 
