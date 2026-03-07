@@ -339,7 +339,7 @@ class ChainInteractor:
             self._agent_id = token_id
             return token_id
         except Exception:
-            logger.warning("Could not retrieve agent token ID.")
+            logger.debug("Agent token ID not available (agent may not be registered yet).")
             return 0
 
     def set_metadata(self, key: str, value: str) -> str:

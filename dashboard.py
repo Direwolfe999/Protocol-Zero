@@ -84,6 +84,30 @@ except Exception:
     _HAS_DEX = False
     _DEX = None
 
+try:
+    from nova_act_auditor import NovaActAuditor
+    _NOVA_ACT = NovaActAuditor()
+    _HAS_NOVA_ACT = True
+except Exception:
+    _HAS_NOVA_ACT = False
+    _NOVA_ACT = None
+
+try:
+    from nova_sonic_voice import NovaSonicVoice
+    _NOVA_SONIC = NovaSonicVoice()
+    _HAS_NOVA_SONIC = True
+except Exception:
+    _HAS_NOVA_SONIC = False
+    _NOVA_SONIC = None
+
+try:
+    from nova_embeddings import NovaEmbeddingsAnalyzer
+    _NOVA_EMBED = NovaEmbeddingsAnalyzer()
+    _HAS_NOVA_EMBED = True
+except Exception:
+    _HAS_NOVA_EMBED = False
+    _NOVA_EMBED = None
+
 
 # ════════════════════════════════════════════════════════════
 #  Page Config
@@ -586,6 +610,83 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# ── Nova AI Loader + Anti-Dimming (Single CSS-only system) ────
+st.markdown("""
+<style>
+/* ══════════════════════════════════════════════════════════
+   ANTI-DIMMING — prevent Streamlit rerun opacity flash
+   ══════════════════════════════════════════════════════════ */
+[data-stale="true"],
+[data-stale="true"] > *,
+[data-stale="true"] > div,
+[data-stale="true"] > div > *,
+.stApp div[data-stale],
+.stApp [data-testid="stAppViewContainer"],
+.stApp [data-testid="stAppViewContainer"] > div,
+section.main > div,
+section.main > div > div,
+[data-testid="stVerticalBlockBorderWrapper"],
+.element-container {
+    opacity: 1 !important;
+}
+.stApp div, .stApp section, .stApp header,
+.stApp [data-testid], .element-container,
+.stMarkdown, .stPlotlyChart, .stDataFrame,
+[data-testid="column"], [data-testid="stVerticalBlock"] {
+    transition: none !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   NOVA AI LOADER — single CSS-only spinner
+   Shows ONLY after 350ms of stale state (skips quick reruns)
+   ══════════════════════════════════════════════════════════ */
+@keyframes novaRingSpin  { to { transform: rotate(360deg); } }
+@keyframes novaGradShift { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+@keyframes novaFadeIn    { 0%{opacity:0} 100%{opacity:1} }
+
+/* Gradient spinner ring + soft backdrop (box-shadow trick) */
+[data-stale="true"]::before {
+    content: '';
+    position: fixed;
+    top: 50%; left: 50%;
+    margin: -34px 0 0 -34px;
+    z-index: 999999;
+    width: 68px; height: 68px;
+    border-radius: 50%;
+    border: 2.5px solid transparent;
+    border-top-color: #64ffda;
+    border-right-color: #b388ff;
+    box-shadow: 0 0 12px #64ffda33, 0 0 0 200vmax rgba(6,6,18,0.45);
+    animation: novaRingSpin .6s linear infinite,
+               novaFadeIn 0s ease 0.35s both;
+    pointer-events: none;
+}
+
+/* "NOVA AI" gradient label */
+[data-stale="true"]::after {
+    content: 'N O V A   A I';
+    position: fixed;
+    top: calc(50% + 48px); left: 50%;
+    transform: translateX(-50%);
+    z-index: 999999;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .5rem; letter-spacing: 3px;
+    white-space: nowrap;
+    background: linear-gradient(90deg, #64ffda, #b388ff, #4fc3f7, #ffd93d, #64ffda);
+    background-size: 400% 100%;
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: novaGradShift 2s ease infinite,
+               novaFadeIn 0s ease 0.35s both;
+    pointer-events: none;
+}
+
+/* Streamlit built-in spinner — match theme */
+.stSpinner > div > div { border-top-color: #64ffda !important; }
+</style>
+""", unsafe_allow_html=True)
+
+
 # ════════════════════════════════════════════════════════════
 #  Session State Defaults
 # ════════════════════════════════════════════════════════════
@@ -648,6 +749,11 @@ _DEFAULTS: dict[str, Any] = {
     "wallet_weth":         0.0,
     "wallet_usdc":         0.0,
     "last_swap_result":    None,
+
+    # ── Nova Modules ──────────────────────────────────
+    "nova_act_results":    [],   # history of audit results
+    "nova_voice_history":  [],   # history of voice commands / responses
+    "nova_embed_results":  [],   # history of embedding analyses
 }
 
 for _k, _v in _DEFAULTS.items():
@@ -895,6 +1001,7 @@ def _generate_synthetic_ohlcv(symbol: str, hours: int = 72) -> pd.DataFrame:
     return df
 
 
+@st.cache_data(ttl=120, show_spinner=False)
 def _try_fetch_live(symbol: str) -> pd.DataFrame | None:
     try:
         import ccxt
@@ -1338,12 +1445,15 @@ with st.sidebar:
     st.session_state["agent_wallet"] = st.text_input("Wallet",
                                                       value=st.session_state["agent_wallet"])
 
-    # Try to pull real reputation from chain
+    # Try to pull real reputation from chain (cached — refresh every 60s)
     if _HAS_CHAIN and st.session_state["agent_registered"]:
-        rep_data = _fetch_on_chain_reputation()
-        if rep_data["score"] is not None:
-            st.session_state["reputation_score"] = int(rep_data["score"])
-            st.session_state["on_chain_rep_count"] = rep_data["count"]
+        _rep_now = time.time()
+        if _rep_now - st.session_state.get("_rep_cache_ts", 0) > 60:
+            rep_data = _fetch_on_chain_reputation()
+            if rep_data["score"] is not None:
+                st.session_state["reputation_score"] = int(rep_data["score"])
+                st.session_state["on_chain_rep_count"] = rep_data["count"]
+            st.session_state["_rep_cache_ts"] = _rep_now
 
     rep   = st.session_state["reputation_score"]
     rep_c = "#64ffda" if rep >= 70 else ("#ffd93d" if rep >= 40 else "#ff6b6b")
@@ -1470,13 +1580,17 @@ with st.sidebar:
         dex_on = st.session_state.get("dex_enabled", False)
         dex_icon = "🟢" if dex_on else "🔴"
         st.markdown(f"{dex_icon} **Uniswap V3** — {'Enabled' if dex_on else 'Disabled'}")
-        try:
-            _sb = _DEX.get_balances()
-            st.session_state["wallet_eth"] = _sb.get("eth", 0.0)
-            st.session_state["wallet_weth"] = _sb.get("weth", 0.0)
-            st.session_state["wallet_usdc"] = _sb.get("usdc", 0.0)
-        except Exception:
-            pass
+        # Cache DEX balances — refresh every 30s
+        _dex_now = time.time()
+        if _dex_now - st.session_state.get("_dex_bal_ts", 0) > 30:
+            try:
+                _sb = _DEX.get_balances()
+                st.session_state["wallet_eth"] = _sb.get("eth", 0.0)
+                st.session_state["wallet_weth"] = _sb.get("weth", 0.0)
+                st.session_state["wallet_usdc"] = _sb.get("usdc", 0.0)
+                st.session_state["_dex_bal_ts"] = _dex_now
+            except Exception:
+                pass
         st.markdown(
             f'<div class="mcard">'
             f'<div class="lbl">Wallet Balances</div>'
@@ -1493,6 +1607,28 @@ with st.sidebar:
         st.markdown("🔴 **DEX not connected**")
         st.caption("Set DEX_ENABLED=true in .env and add a funded wallet.")
 
+    st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
+
+    # ── Nova AI Modules ──────────────────────────────────
+    st.markdown("### 🧠 Nova AI Modules")
+    _nova_items = [
+        ("Nova Act (UI Audit)", _HAS_NOVA_ACT, "Browser-based contract auditor"),
+        ("Nova Sonic (Voice)", _HAS_NOVA_SONIC, "Voice command & alert system"),
+        ("Nova Embeddings", _HAS_NOVA_EMBED, "Multimodal scam detection"),
+    ]
+    for _nname, _nstatus, _ndesc in _nova_items:
+        _nicon = "🟢" if _nstatus else "🔴"
+        _ncol = "#64ffda" if _nstatus else "#ff6b6b"
+        st.markdown(
+            f'<div class="mcard">'
+            f'<div class="lbl">{_nicon} {_nname}</div>'
+            f'<div style="font-size:0.65rem;color:#495670;margin-top:2px">{_ndesc}</div>'
+            f'<div style="font-size:0.6rem;color:{_ncol};margin-top:2px">'
+            f'{"Active" if _nstatus else "Module not loaded"}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
 
 # ════════════════════════════════════════════════════════════
 #  HEADER
@@ -1505,7 +1641,10 @@ st.markdown(
     'v2.0 · Autonomous Agent · ERC-8004 · '
     f'{"🟢" if _HAS_CHAIN else "🔴"} Chain '
     f'{"🟢" if _HAS_SIGN else "🔴"} Sign '
-    f'{"🟢" if _HAS_PERF else "🔴"} Perf'
+    f'{"🟢" if _HAS_PERF else "🔴"} Perf '
+    f'{"🟢" if _HAS_NOVA_ACT else "🔴"} Act '
+    f'{"🟢" if _HAS_NOVA_SONIC else "🔴"} Sonic '
+    f'{"🟢" if _HAS_NOVA_EMBED else "🔴"} Embed'
     '</span>',
     unsafe_allow_html=True,
 )
@@ -1576,7 +1715,8 @@ st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 # ════════════════════════════════════════════════════════════
 
 (tab_market, tab_brain, tab_risk, tab_trust, tab_perf,
- tab_audit, tab_calib, tab_micro, tab_log, tab_pnl, tab_history) = st.tabs([
+ tab_audit, tab_calib, tab_micro, tab_log, tab_pnl, tab_history,
+ tab_nova_act, tab_voice, tab_multimodal) = st.tabs([
     "📊  Market",
     "🧠  AI Brain",
     "🛡️  Risk & Exec",
@@ -1588,6 +1728,9 @@ st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
     "📒  TX Log",
     "📈  P&L",
     "🔍  History",
+    "🔍  Nova Act Audit",
+    "🎙️  Voice AI",
+    "🖼️  Multimodal",
 ])
 
 
@@ -1692,7 +1835,6 @@ with tab_brain:
         with st.spinner("Neural pathways activating…"):
             _cog("▣", f"Analysis cycle initiated — pair {st.session_state['selected_pair']}", "info")
             _cog("▣", "Regime detection: scanning SMA/RSI/Vol matrix", "info")
-            time.sleep(0.3)
 
             decision = run_analysis(
                 df, st.session_state["selected_pair"],
@@ -1714,7 +1856,6 @@ with tab_brain:
                        else ("err" if decision["action"] == "SELL" else "warn"))
                 _cog("▣", f"Signal: {decision['action']} {decision['asset']}", lvl)
             _cog("✓", "Analysis cycle complete", "ok")
-            time.sleep(0.5)
 
             st.session_state["latest_decision"] = decision
             st.session_state["decision_history"].append({
@@ -2278,13 +2419,30 @@ with tab_trust:
     st.markdown("### 🌐 ERC-8004 On-Chain Trust Panel")
     st.caption("Live trust data from Identity, Reputation, and Validation Registries on Sepolia")
 
-    # ── Refresh trust data ─────────────────────────────
+    # ── Refresh trust data (cached — only fetch on click) ─
+    if "_trust_cache" not in st.session_state:
+        st.session_state["_trust_cache"] = {
+            "identity": {"registered": st.session_state.get("agent_registered", False),
+                         "token_id": st.session_state.get("on_chain_token_id"),
+                         "error": None},
+            "reputation": {"score": st.session_state.get("reputation_score", 95),
+                           "count": st.session_state.get("on_chain_rep_count", 0),
+                           "error": None},
+            "validation": {"total": st.session_state.get("on_chain_val_count", 0),
+                           "approved": 0, "error": None},
+        }
     if st.button("🔄 Refresh Trust Data", key="refresh_trust"):
         _cog("▣", "Querying ERC-8004 registries…", "info")
+        st.session_state["_trust_cache"] = {
+            "identity": _fetch_on_chain_identity(),
+            "reputation": _fetch_on_chain_reputation(),
+            "validation": _fetch_validation_summary(),
+        }
+        _cog("✓", "Trust data refreshed from chain", "ok")
 
-    identity_data = _fetch_on_chain_identity()
-    rep_data = _fetch_on_chain_reputation()
-    val_data = _fetch_validation_summary()
+    identity_data = st.session_state["_trust_cache"]["identity"]
+    rep_data = st.session_state["_trust_cache"]["reputation"]
+    val_data = st.session_state["_trust_cache"]["validation"]
 
     # ── Identity Registry ──────────────────────────────
     st.markdown("#### 🆔 Identity Registry (ERC-721)")
@@ -2385,6 +2543,9 @@ with tab_trust:
         ("Risk Check", _HAS_RISK),
         ("Sign Trade", _HAS_SIGN),
         ("DEX Executor", _HAS_DEX),
+        ("Nova Act", _HAS_NOVA_ACT),
+        ("Nova Sonic", _HAS_NOVA_SONIC),
+        ("Nova Embed", _HAS_NOVA_EMBED),
     ]
     cols = st.columns(len(modules))
     for i, (name, connected) in enumerate(modules):
@@ -2400,13 +2561,16 @@ with tab_trust:
     # ── DEX Wallet Balances ────────────────────────────
     st.markdown("#### 💰 DEX Wallet Balances")
     if _HAS_DEX and _DEX is not None:
-        try:
-            _bal = _DEX.get_balances()
-            st.session_state["wallet_eth"] = _bal.get("eth", 0.0)
-            st.session_state["wallet_weth"] = _bal.get("weth", 0.0)
-            st.session_state["wallet_usdc"] = _bal.get("usdc", 0.0)
-        except Exception:
-            pass
+        _dex_t = time.time()
+        if _dex_t - st.session_state.get("_dex_bal_ts", 0) > 30:
+            try:
+                _bal = _DEX.get_balances()
+                st.session_state["wallet_eth"] = _bal.get("eth", 0.0)
+                st.session_state["wallet_weth"] = _bal.get("weth", 0.0)
+                st.session_state["wallet_usdc"] = _bal.get("usdc", 0.0)
+                st.session_state["_dex_bal_ts"] = _dex_t
+            except Exception:
+                pass
     dex_status_icon = "🟢 ENABLED" if st.session_state.get("dex_enabled") else "🔴 DISABLED"
     dex_sc = "#64ffda" if st.session_state.get("dex_enabled") else "#ff6b6b"
     wc1, wc2, wc3, wc4 = st.columns(4)
@@ -2929,6 +3093,551 @@ with tab_micro:
         st.info("Load market data to see microstructure analysis.")
 
 
+# ──────────────────────────────────────────────────────────
+#  TAB 12 — 🔍 Nova Act Auditor
+# ──────────────────────────────────────────────────────────
+
+with tab_nova_act:
+    st.markdown("### 🔍 Nova Act — Smart Contract Auditor")
+    st.caption("Browser-based automated contract & token auditing via Amazon Nova Act")
+
+    if not _HAS_NOVA_ACT:
+        st.warning("⚠️ Nova Act module not loaded. Install `nova-act` and set `NOVA_ACT_API_KEY` in .env")
+    else:
+        na_col1, na_col2 = st.columns([2, 1])
+        with na_col1:
+            audit_address = st.text_input(
+                "Contract / Token Address",
+                placeholder="0x...",
+                key="nova_act_address",
+            )
+        with na_col2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            audit_type = st.radio(
+                "Audit Type", ["Contract", "Token", "Quick Safety"],
+                horizontal=True, key="nova_act_type",
+            )
+
+        if st.button("🔍 Run Nova Act Audit", key="btn_nova_audit", type="primary"):
+            if not audit_address or len(audit_address) < 10:
+                st.error("Please enter a valid contract address.")
+            else:
+                with st.spinner("🤖 Nova Act is automating browser-based audit…"):
+                    _cog("🔍", f"Nova Act auditing {audit_address[:16]}…", "info")
+                    try:
+                        if audit_type == "Contract":
+                            result = _NOVA_ACT.audit_contract(audit_address)
+                        elif audit_type == "Token":
+                            result = _NOVA_ACT.audit_token(audit_address)
+                        else:
+                            result = _NOVA_ACT.quick_safety_check(audit_address)
+
+                        # Store result
+                        entry = {
+                            "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                            "address": audit_address,
+                            "type": audit_type,
+                            "result": result.__dict__ if hasattr(result, '__dict__') else result,
+                        }
+                        st.session_state["nova_act_results"].append(entry)
+                        _cog("✓", f"Audit complete — risk: {getattr(result, 'risk_level', 'N/A')}", "ok")
+                    except Exception as e:
+                        st.error(f"Audit failed: {e}")
+                        _cog("✗", f"Nova Act error: {e}", "err")
+                st.rerun()
+
+        # ── Display Results ────────────────────────────
+        results = st.session_state.get("nova_act_results", [])
+        if results:
+            latest = results[-1]
+            r = latest["result"]
+
+            # Risk Score Header
+            risk_lev = r.get("risk_level", "UNKNOWN")
+            risk_sc = r.get("risk_score", 0)
+            risk_colors = {"LOW": "#64ffda", "MEDIUM": "#ffd93d", "HIGH": "#ff6b6b", "CRITICAL": "#ff0040"}
+            rc = risk_colors.get(risk_lev, "#8892b0")
+            st.markdown(f"""
+            <div style="background:linear-gradient(135deg, rgba(6,6,18,0.95), rgba(26,26,62,0.8));
+                        border:1px solid {rc}40;border-radius:12px;padding:1.5rem;margin:1rem 0;
+                        text-align:center">
+                <div style="font-size:2.5rem;margin-bottom:0.3rem">🛡️</div>
+                <div style="font-size:1.8rem;font-weight:700;color:{rc}">{risk_lev}</div>
+                <div style="font-size:0.9rem;color:#8892b0;margin-top:0.3rem">
+                    Risk Score: <b>{risk_sc}/100</b> · {latest['type']} Audit ·
+                    <span style="color:#495670">{latest['address'][:20]}…</span></div>
+            </div>""", unsafe_allow_html=True)
+
+            # Detail Cards
+            ac1, ac2, ac3, ac4 = st.columns(4)
+            with ac1:
+                cv = r.get("contract_verified", False)
+                st.markdown(mcard("Contract Verified",
+                                  "✅ Yes" if cv else "❌ No", "", cv),
+                            unsafe_allow_html=True)
+            with ac2:
+                ll = r.get("liquidity_locked", False)
+                st.markdown(mcard("Liquidity Locked",
+                                  "✅ Yes" if ll else "❌ No", "", ll),
+                            unsafe_allow_html=True)
+            with ac3:
+                warnings = r.get("warning_banners", [])
+                wcount = len(warnings) if isinstance(warnings, list) else 0
+                st.markdown(mcard("Warnings", str(wcount),
+                                  "Detected", wcount == 0),
+                            unsafe_allow_html=True)
+            with ac4:
+                sf = r.get("social_flags", [])
+                sfcount = len(sf) if isinstance(sf, list) else 0
+                st.markdown(mcard("Social Flags", str(sfcount),
+                                  "Issues", sfcount == 0),
+                            unsafe_allow_html=True)
+
+            # Warnings Detail
+            if warnings:
+                st.markdown("#### ⚠️ Warning Banners Detected")
+                for w in warnings:
+                    st.markdown(f"""
+                    <div style="background:#ff6b6b10;border-left:3px solid #ff6b6b;
+                                padding:0.5rem 0.8rem;margin:0.3rem 0;border-radius:0 6px 6px 0;
+                                color:#ff9999;font-size:0.8rem">
+                        ⚠️ {w}
+                    </div>""", unsafe_allow_html=True)
+
+            # Evidence Screenshots
+            screenshots = r.get("evidence_screenshots", [])
+            if screenshots:
+                st.markdown("#### 📸 Evidence Screenshots")
+                for idx, ss in enumerate(screenshots):
+                    st.markdown(f"""
+                    <div class="mcard">
+                        <div class="lbl">Screenshot {idx + 1}</div>
+                        <div style="font-size:0.7rem;color:#8892b0;word-break:break-all">{ss}</div>
+                    </div>""", unsafe_allow_html=True)
+
+            # Audit History
+            if len(results) > 1:
+                st.markdown("#### 📋 Audit History")
+                for h_entry in reversed(results[:-1]):
+                    hr = h_entry["result"]
+                    hrc = risk_colors.get(hr.get("risk_level", ""), "#495670")
+                    st.markdown(f"""
+                    <div style="border-left:3px solid {hrc};padding:0.4rem 0.8rem;
+                                margin:0.2rem 0;font-size:0.75rem;color:#8892b0">
+                        <b style="color:{hrc}">{hr.get('risk_level', '?')}</b> ·
+                        {h_entry['type']} · {h_entry['address'][:18]}… ·
+                        <span style="color:#495670">{h_entry['timestamp']}</span>
+                    </div>""", unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="text-align:center;padding:3rem;color:#495670">
+                <div style="font-size:2.5rem;margin-bottom:0.5rem">🔍</div>
+                <div>Enter a contract address and click <b>Run Nova Act Audit</b></div>
+                <div style="font-size:0.75rem;margin-top:0.5rem;color:#3a3a5c">
+                    Nova Act automates browser interactions on Etherscan & DEXTools
+                    to verify contracts, check liquidity locks, and detect warning banners.</div>
+            </div>""", unsafe_allow_html=True)
+
+    # Nova Act Module Status
+    if _HAS_NOVA_ACT:
+        st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
+        act_status = _NOVA_ACT.status()
+        act_mode = act_status.get("mode", "unknown")
+        st.caption(f"Module: **Nova Act** · Mode: **{act_mode}** · "
+                   f"Total Audits: **{len(st.session_state.get('nova_act_results', []))}**")
+
+
+# ──────────────────────────────────────────────────────────
+#  TAB 13 — 🎙️ Voice AI War Room
+# ──────────────────────────────────────────────────────────
+
+with tab_voice:
+    st.markdown("### 🎙️ Nova Sonic — Voice AI War Room")
+    st.caption("Natural language voice commands & AI-generated alerts via Amazon Nova Sonic")
+
+    if not _HAS_NOVA_SONIC:
+        st.warning("⚠️ Nova Sonic module not loaded. Ensure AWS credentials are configured.")
+    else:
+        # ── Voice Command Input ────────────────────────
+        st.markdown("#### 💬 Send Command")
+        vc_col1, vc_col2 = st.columns([4, 1])
+        with vc_col1:
+            voice_text = st.text_input(
+                "Type a voice command",
+                placeholder="What's my portfolio status? / Kill all trades / Buy 100 ETH",
+                key="voice_text_input",
+            )
+        with vc_col2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            voice_btn = st.button("🎤 Send", key="btn_voice_send", type="primary")
+
+        if voice_btn and voice_text:
+            with st.spinner("🎙️ Processing with Nova Sonic…"):
+                _cog("🎤", f"Voice command: {voice_text[:40]}…", "info")
+                try:
+                    response = _NOVA_SONIC.process_voice_text(
+                        voice_text,
+                        context={
+                            "portfolio_value": st.session_state.get("total_capital_usd", 10000),
+                            "session_pnl": st.session_state.get("session_pnl", 0),
+                            "trade_count": st.session_state.get("trade_count", 0),
+                            "kill_switch": st.session_state.get("kill_switch_active", False),
+                            "regime": st.session_state.get("market_regime", "UNCERTAIN"),
+                            "latest_decision": st.session_state.get("latest_decision"),
+                        }
+                    )
+
+                    entry = {
+                        "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                        "command": voice_text,
+                        "intent": getattr(response, 'intent_handled', 'unknown') if hasattr(response, 'intent_handled') else response.get('intent_handled', 'unknown'),
+                        "response_text": getattr(response, 'text', str(response)) if hasattr(response, 'text') else response.get('text', str(response)),
+                        "success": getattr(response, 'success', True) if hasattr(response, 'success') else response.get('success', True),
+                    }
+                    st.session_state["nova_voice_history"].append(entry)
+
+                    # Handle kill_switch intent
+                    intent = entry["intent"]
+                    if intent == "kill_switch":
+                        st.session_state["kill_switch_active"] = True
+                        st.session_state["autonomous_mode"] = False
+                        _cog("⛔", "Voice command triggered KILL SWITCH", "err")
+
+                    _cog("✓", f"Voice response: {entry['response_text'][:60]}…", "ok")
+                except Exception as e:
+                    st.error(f"Voice processing failed: {e}")
+                    _cog("✗", f"Nova Sonic error: {e}", "err")
+            st.rerun()
+
+        # ── Quick Action Buttons ───────────────────────
+        st.markdown("#### ⚡ Quick Voice Commands")
+        qc1, qc2, qc3, qc4, qc5 = st.columns(5)
+        quick_cmds = [
+            (qc1, "📊 Status", "What's my portfolio status?"),
+            (qc2, "⛔ Kill", "Kill all trades now"),
+            (qc3, "📈 Risk", "What's the current risk level?"),
+            (qc4, "💰 Balance", "Show my balance"),
+            (qc5, "🧠 Regime", "What market regime are we in?"),
+        ]
+        for col, label, cmd in quick_cmds:
+            with col:
+                if st.button(label, key=f"qcmd_{label}", width="stretch"):
+                    with st.spinner(f"Processing: {cmd}"):
+                        try:
+                            resp = _NOVA_SONIC.process_voice_text(
+                                cmd,
+                                context={
+                                    "portfolio_value": st.session_state.get("total_capital_usd", 10000),
+                                    "session_pnl": st.session_state.get("session_pnl", 0),
+                                    "trade_count": st.session_state.get("trade_count", 0),
+                                    "kill_switch": st.session_state.get("kill_switch_active", False),
+                                    "regime": st.session_state.get("market_regime", "UNCERTAIN"),
+                                    "latest_decision": st.session_state.get("latest_decision"),
+                                }
+                            )
+                            st.session_state["nova_voice_history"].append({
+                                "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                                "command": cmd,
+                                "intent": getattr(resp, 'intent_handled', 'unknown') if hasattr(resp, 'intent_handled') else resp.get('intent_handled', 'unknown'),
+                                "response_text": getattr(resp, 'text', str(resp)) if hasattr(resp, 'text') else resp.get('text', str(resp)),
+                                "success": True,
+                            })
+                            if label == "⛔ Kill":
+                                st.session_state["kill_switch_active"] = True
+                                st.session_state["autonomous_mode"] = False
+                        except Exception as e:
+                            st.error(str(e))
+                    st.rerun()
+
+        st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
+
+        # ── Generate AI Alert ──────────────────────────
+        st.markdown("#### 🚨 AI Alert Generator")
+        al_col1, al_col2 = st.columns([3, 1])
+        with al_col1:
+            alert_msg = st.text_input(
+                "Alert Message",
+                placeholder="Sudden 15% price drop on ETH detected",
+                key="alert_msg_input",
+            )
+        with al_col2:
+            alert_sev = st.selectbox("Severity", ["low", "medium", "high", "critical"],
+                                     index=2, key="alert_severity")
+        if st.button("🔊 Generate Alert", key="btn_gen_alert"):
+            if alert_msg:
+                with st.spinner("Generating voice alert…"):
+                    try:
+                        alert_resp = _NOVA_SONIC.generate_alert(alert_msg, severity=alert_sev)
+                        alert_text = getattr(alert_resp, 'text', str(alert_resp)) if hasattr(alert_resp, 'text') else alert_resp.get('text', str(alert_resp))
+                        st.session_state["nova_voice_history"].append({
+                            "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                            "command": f"[ALERT:{alert_sev.upper()}] {alert_msg}",
+                            "intent": "alert",
+                            "response_text": alert_text,
+                            "success": True,
+                        })
+                        _cog("🚨", f"Alert generated: {alert_text[:60]}…", "err" if alert_sev in ("high", "critical") else "info")
+                    except Exception as e:
+                        st.error(str(e))
+                st.rerun()
+
+        st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
+
+        # ── Voice Command History ──────────────────────
+        st.markdown("#### 📜 Voice Command History")
+        voice_hist = st.session_state.get("nova_voice_history", [])
+        if voice_hist:
+            for vh in reversed(voice_hist[-20:]):
+                is_alert = vh.get("intent") == "alert"
+                icon = "🚨" if is_alert else ("✅" if vh.get("success") else "❌")
+                intent_color = "#ff6b6b" if is_alert else "#64ffda"
+                st.markdown(f"""
+                <div style="border-left:3px solid {intent_color};padding:0.6rem 0.8rem;
+                            margin:0.4rem 0;background:rgba(6,6,18,0.5);border-radius:0 8px 8px 0">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <span style="font-size:0.85rem;color:#ccd6f6;font-weight:600">
+                            {icon} {vh['command'][:60]}{'…' if len(vh['command']) > 60 else ''}</span>
+                        <span style="color:#495670;font-size:0.65rem">{vh['timestamp']}</span>
+                    </div>
+                    <div style="color:#64ffda;font-size:0.7rem;margin-top:0.2rem">
+                        Intent: <b>{vh['intent']}</b></div>
+                    <div style="color:#8892b0;font-size:0.75rem;margin-top:0.3rem">
+                        {vh['response_text'][:200]}{'…' if len(vh.get('response_text', '')) > 200 else ''}</div>
+                </div>""", unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="text-align:center;padding:3rem;color:#495670">
+                <div style="font-size:2.5rem;margin-bottom:0.5rem">🎙️</div>
+                <div>Type a voice command or use the quick action buttons above.</div>
+                <div style="font-size:0.75rem;margin-top:0.5rem;color:#3a3a5c">
+                    Nova Sonic understands: portfolio status, kill switch, trade confirmations,
+                    risk queries, balance checks, and custom alerts.</div>
+            </div>""", unsafe_allow_html=True)
+
+    # Module Status
+    if _HAS_NOVA_SONIC:
+        st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
+        sonic_status = _NOVA_SONIC.status()
+        sonic_mode = sonic_status.get("mode", "unknown")
+        st.caption(f"Module: **Nova Sonic** · Mode: **{sonic_mode}** · "
+                   f"Commands Processed: **{len(st.session_state.get('nova_voice_history', []))}**")
+
+
+# ──────────────────────────────────────────────────────────
+#  TAB 14 — 🖼️ Multimodal Embeddings
+# ──────────────────────────────────────────────────────────
+
+with tab_multimodal:
+    st.markdown("### 🖼️ Nova Embeddings — Multimodal Scam Detection")
+    st.caption("Analyze text, images, logos & charts for scam patterns using Amazon Nova Multimodal Embeddings")
+
+    if not _HAS_NOVA_EMBED:
+        st.warning("⚠️ Nova Embeddings module not loaded. Ensure AWS credentials are configured.")
+    else:
+        # ── Analysis Type ──────────────────────────────
+        embed_mode = st.radio(
+            "Analysis Mode",
+            ["📝 Text Analysis", "🖼️ Image Analysis", "🔍 Logo Comparison", "📊 Chart Analysis"],
+            horizontal=True, key="embed_mode",
+        )
+
+        if embed_mode == "📝 Text Analysis":
+            st.markdown("#### 📝 Text Scam Pattern Analysis")
+            embed_text = st.text_area(
+                "Paste token description, whitepaper excerpt, or social media post",
+                height=120,
+                placeholder="Example: SafeMoon 2.0 — 1000x guaranteed returns! Locked liquidity for 1 week. Dev team anonymous.",
+                key="embed_text_input",
+            )
+            if st.button("🔍 Analyze Text", key="btn_embed_text", type="primary"):
+                if embed_text:
+                    with st.spinner("🧠 Analyzing with Nova Embeddings…"):
+                        _cog("🖼️", "Running multimodal text analysis…", "info")
+                        try:
+                            result = _NOVA_EMBED.analyze_text(embed_text)
+                            entry = {
+                                "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                                "mode": "text",
+                                "input_preview": embed_text[:80],
+                                "result": result.__dict__ if hasattr(result, '__dict__') else result,
+                            }
+                            st.session_state["nova_embed_results"].append(entry)
+                            _cog("✓", f"Text analysis — risk: {getattr(result, 'risk_label', 'N/A')}", "ok")
+                        except Exception as e:
+                            st.error(f"Analysis failed: {e}")
+                            _cog("✗", f"Embeddings error: {e}", "err")
+                    st.rerun()
+
+        elif embed_mode == "🖼️ Image Analysis":
+            st.markdown("#### 🖼️ Image Scam Detection")
+            st.markdown("""
+            <div class="mcard">
+                <div class="lbl">How it works</div>
+                <div style="font-size:0.75rem;color:#8892b0;margin-top:4px">
+                    Upload or paste a URL to a token logo, screenshot, or promotional image.
+                    Nova Embeddings compares against known scam patterns.</div>
+            </div>""", unsafe_allow_html=True)
+            img_url = st.text_input(
+                "Image URL or Base64",
+                placeholder="https://example.com/token-logo.png",
+                key="embed_img_input",
+            )
+            if st.button("🔍 Analyze Image", key="btn_embed_img", type="primary"):
+                if img_url:
+                    with st.spinner("🖼️ Analyzing image with Nova Embeddings…"):
+                        _cog("🖼️", "Running multimodal image analysis…", "info")
+                        try:
+                            result = _NOVA_EMBED.analyze_image(img_url)
+                            entry = {
+                                "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                                "mode": "image",
+                                "input_preview": img_url[:80],
+                                "result": result.__dict__ if hasattr(result, '__dict__') else result,
+                            }
+                            st.session_state["nova_embed_results"].append(entry)
+                            _cog("✓", f"Image analysis — risk: {getattr(result, 'risk_label', 'N/A')}", "ok")
+                        except Exception as e:
+                            st.error(f"Analysis failed: {e}")
+                    st.rerun()
+
+        elif embed_mode == "🔍 Logo Comparison":
+            st.markdown("#### 🔍 Logo Comparison (Fake Token Detection)")
+            lc1, lc2 = st.columns(2)
+            with lc1:
+                logo_url1 = st.text_input("Reference Logo URL", placeholder="Official Uniswap logo URL", key="logo1")
+            with lc2:
+                logo_url2 = st.text_input("Suspect Logo URL", placeholder="Suspicious token logo URL", key="logo2")
+            if st.button("🔍 Compare Logos", key="btn_compare_logos", type="primary"):
+                if logo_url1 and logo_url2:
+                    with st.spinner("🔍 Comparing logos…"):
+                        try:
+                            result = _NOVA_EMBED.compare_logos(logo_url1, logo_url2)
+                            entry = {
+                                "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                                "mode": "logo_compare",
+                                "input_preview": f"{logo_url1[:30]}… vs {logo_url2[:30]}…",
+                                "result": result.__dict__ if hasattr(result, '__dict__') else result,
+                            }
+                            st.session_state["nova_embed_results"].append(entry)
+                            _cog("✓", f"Logo comparison complete", "ok")
+                        except Exception as e:
+                            st.error(f"Comparison failed: {e}")
+                    st.rerun()
+
+        else:  # Chart Analysis
+            st.markdown("#### 📊 Chart Pattern Analysis")
+            chart_url = st.text_input(
+                "Chart Image URL",
+                placeholder="URL to a trading chart screenshot",
+                key="chart_url_input",
+            )
+            if st.button("🔍 Analyze Chart", key="btn_chart_analyze", type="primary"):
+                if chart_url:
+                    with st.spinner("📊 Analyzing chart pattern…"):
+                        try:
+                            result = _NOVA_EMBED.analyze_chart(chart_url)
+                            entry = {
+                                "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                                "mode": "chart",
+                                "input_preview": chart_url[:80],
+                                "result": result.__dict__ if hasattr(result, '__dict__') else result,
+                            }
+                            st.session_state["nova_embed_results"].append(entry)
+                            _cog("✓", f"Chart analysis — risk: {getattr(result, 'risk_label', 'N/A')}", "ok")
+                        except Exception as e:
+                            st.error(f"Analysis failed: {e}")
+                    st.rerun()
+
+        st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
+
+        # ── Results Display ────────────────────────────
+        st.markdown("#### 📊 Analysis Results")
+        embed_results = st.session_state.get("nova_embed_results", [])
+        if embed_results:
+            latest_er = embed_results[-1]
+            er = latest_er["result"]
+
+            # Result Header
+            risk_label = er.get("risk_label", "UNKNOWN")
+            sim_score = er.get("similarity_score", 0)
+            er_colors = {"SAFE": "#64ffda", "LOW_RISK": "#64ffda", "MEDIUM_RISK": "#ffd93d",
+                         "HIGH_RISK": "#ff6b6b", "CRITICAL": "#ff0040", "UNKNOWN": "#8892b0"}
+            erc = er_colors.get(risk_label, "#8892b0")
+
+            st.markdown(f"""
+            <div style="background:linear-gradient(135deg, rgba(6,6,18,0.95), rgba(26,26,62,0.8));
+                        border:1px solid {erc}40;border-radius:12px;padding:1.5rem;margin:1rem 0;
+                        text-align:center">
+                <div style="font-size:2rem;margin-bottom:0.3rem">🖼️</div>
+                <div style="font-size:1.5rem;font-weight:700;color:{erc}">{risk_label}</div>
+                <div style="font-size:0.85rem;color:#8892b0;margin-top:0.3rem">
+                    Similarity Score: <b>{sim_score:.2f}</b> ·
+                    Mode: <b>{latest_er['mode']}</b> ·
+                    <span style="color:#495670">{latest_er['timestamp']}</span></div>
+            </div>""", unsafe_allow_html=True)
+
+            # Findings
+            findings = er.get("findings", [])
+            if findings:
+                st.markdown("##### 🔎 Findings")
+                for f_item in findings:
+                    if isinstance(f_item, dict):
+                        f_name = f_item.get("pattern_name", f_item.get("name", "Unknown"))
+                        f_sim = f_item.get("similarity", 0)
+                        f_cat = f_item.get("category", "")
+                        f_sev = f_item.get("severity", "medium")
+                        sev_colors = {"low": "#64ffda", "medium": "#ffd93d", "high": "#ff6b6b", "critical": "#ff0040"}
+                        sc = sev_colors.get(f_sev, "#8892b0")
+                        st.markdown(f"""
+                        <div style="border-left:3px solid {sc};padding:0.5rem 0.8rem;
+                                    margin:0.3rem 0;background:rgba(6,6,18,0.5);border-radius:0 6px 6px 0">
+                            <div style="display:flex;justify-content:space-between">
+                                <span style="color:#ccd6f6;font-weight:600;font-size:0.85rem">{f_name}</span>
+                                <span style="color:{sc};font-size:0.75rem;font-weight:600">{f_sev.upper()}</span>
+                            </div>
+                            <div style="color:#8892b0;font-size:0.72rem;margin-top:0.2rem">
+                                Category: {f_cat} · Similarity: {f_sim:.2f}</div>
+                        </div>""", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"""
+                        <div style="border-left:3px solid #ffd93d;padding:0.4rem 0.8rem;
+                                    margin:0.2rem 0;color:#8892b0;font-size:0.8rem">
+                            {f_item}
+                        </div>""", unsafe_allow_html=True)
+
+            # History
+            if len(embed_results) > 1:
+                st.markdown("##### 📋 Analysis History")
+                for he in reversed(embed_results[:-1]):
+                    hr = he["result"]
+                    hrl = hr.get("risk_label", "?")
+                    hrc = er_colors.get(hrl, "#495670")
+                    st.markdown(f"""
+                    <div style="border-left:3px solid {hrc};padding:0.3rem 0.8rem;
+                                margin:0.2rem 0;font-size:0.72rem;color:#8892b0">
+                        <b style="color:{hrc}">{hrl}</b> · {he['mode']} ·
+                        {he['input_preview'][:40]}… ·
+                        <span style="color:#495670">{he['timestamp']}</span>
+                    </div>""", unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="text-align:center;padding:3rem;color:#495670">
+                <div style="font-size:2.5rem;margin-bottom:0.5rem">🖼️</div>
+                <div>Select an analysis mode and submit content to analyze.</div>
+                <div style="font-size:0.75rem;margin-top:0.5rem;color:#3a3a5c">
+                    Nova Embeddings uses multimodal AI to detect fake logos, scam descriptions,
+                    pump-and-dump chart patterns, and other fraud indicators.</div>
+            </div>""", unsafe_allow_html=True)
+
+    # Module Status
+    if _HAS_NOVA_EMBED:
+        st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
+        emb_status = _NOVA_EMBED.status()
+        emb_mode = emb_status.get("mode", "unknown")
+        st.caption(f"Module: **Nova Embeddings** · Mode: **{emb_mode}** · "
+                   f"Analyses: **{len(st.session_state.get('nova_embed_results', []))}**")
+
+
 # ════════════════════════════════════════════════════════════
 #  Footer
 # ════════════════════════════════════════════════════════════
@@ -2939,7 +3648,9 @@ st.markdown("""
             padding:0.5rem;word-break:break-word;line-height:1.6">
     Protocol Zero v2.0 &nbsp;·&nbsp; Autonomous Agent &nbsp;·&nbsp;
     ERC-8004 Compliant &nbsp;·&nbsp; EIP-712 Signed Intents &nbsp;·&nbsp;
-    Nova Lite (Bedrock) &nbsp;·&nbsp; On-Chain Trust &nbsp;·&nbsp;
+    Nova Lite (Bedrock) &nbsp;·&nbsp; Nova Act &nbsp;·&nbsp;
+    Nova Sonic &nbsp;·&nbsp; Nova Embeddings &nbsp;·&nbsp;
+    On-Chain Trust &nbsp;·&nbsp;
     Validation Artifacts &nbsp;·&nbsp; Hackathon 2025/2026
 </div>
 """, unsafe_allow_html=True)
