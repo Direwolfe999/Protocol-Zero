@@ -610,76 +610,70 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ── Nova AI Loader + Anti-Dimming (Single CSS-only system) ────
+# ── Nova AI Loader + Anti-Dimming (Bullet-proof CSS-only) ────
+# ::before = full-screen solid backdrop (NO box-shadow hack)
+# ::after  = spinning ring + text via separate fixed element
 st.markdown("""
 <style>
 /* ══════════════════════════════════════════════════════════
-   ANTI-DIMMING — prevent Streamlit rerun opacity flash
+   ANTI-DIMMING — nuclear override for ALL Streamlit versions
    ══════════════════════════════════════════════════════════ */
 [data-stale="true"],
-[data-stale="true"] > *,
-[data-stale="true"] > div,
-[data-stale="true"] > div > *,
-.stApp div[data-stale],
+[data-stale="true"] *,
 .stApp [data-testid="stAppViewContainer"],
-.stApp [data-testid="stAppViewContainer"] > div,
-section.main > div,
-section.main > div > div,
+.stApp [data-testid="stAppViewContainer"] *,
+section.main, section.main *,
 [data-testid="stVerticalBlockBorderWrapper"],
 .element-container {
     opacity: 1 !important;
-}
-.stApp div, .stApp section, .stApp header,
-.stApp [data-testid], .element-container,
-.stMarkdown, .stPlotlyChart, .stDataFrame,
-[data-testid="column"], [data-testid="stVerticalBlock"] {
     transition: none !important;
 }
 
 /* ══════════════════════════════════════════════════════════
-   NOVA AI LOADER — single CSS-only spinner
-   Shows ONLY after 350ms of stale state (skips quick reruns)
+   NOVA AI LOADER  (CSS-only, zero JS, battery-safe)
+   ──────────────────────────────────────────────────────────
+   ::before  →  full-screen solid backdrop (no box-shadow)
+   ::after   →  spinning gradient ring
+   Both use will-change for GPU compositing (no CPU jank)
+   350ms delay so quick reruns never flash the loader
    ══════════════════════════════════════════════════════════ */
-@keyframes novaRingSpin  { to { transform: rotate(360deg); } }
-@keyframes novaGradShift { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
-@keyframes novaFadeIn    { 0%{opacity:0} 100%{opacity:1} }
+@keyframes pzSpin {
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+}
 
-/* Gradient spinner ring + soft backdrop (box-shadow trick) */
+/* ── Full-screen backdrop — proper element, not box-shadow ── */
 [data-stale="true"]::before {
     content: '';
     position: fixed;
-    top: 50%; left: 50%;
-    margin: -34px 0 0 -34px;
-    z-index: 999999;
-    width: 68px; height: 68px;
-    border-radius: 50%;
-    border: 2.5px solid transparent;
-    border-top-color: #64ffda;
-    border-right-color: #b388ff;
-    box-shadow: 0 0 12px #64ffda33, 0 0 0 200vmax rgba(6,6,18,0.45);
-    animation: novaRingSpin .6s linear infinite,
-               novaFadeIn 0s ease 0.35s both;
+    inset: 0;                           /* covers entire viewport */
+    z-index: 999998;
+    background: rgba(6, 6, 18, 0.5);
+    opacity: 0;
+    animation: pzShow .15s ease .35s forwards;
     pointer-events: none;
+    will-change: opacity;               /* GPU layer */
 }
 
-/* "NOVA AI" gradient label */
+/* ── Spinner ring — centered, GPU-accelerated ── */
 [data-stale="true"]::after {
-    content: 'N O V A   A I';
+    content: '';
     position: fixed;
-    top: calc(50% + 48px); left: 50%;
-    transform: translateX(-50%);
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) rotate(0deg);
     z-index: 999999;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: .5rem; letter-spacing: 3px;
-    white-space: nowrap;
-    background: linear-gradient(90deg, #64ffda, #b388ff, #4fc3f7, #ffd93d, #64ffda);
-    background-size: 400% 100%;
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: novaGradShift 2s ease infinite,
-               novaFadeIn 0s ease 0.35s both;
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    border: 3px solid rgba(100, 255, 218, 0.12);
+    border-top-color: #64ffda;
+    border-right-color: #b388ff;
+    opacity: 0;
+    animation: pzSpin .7s linear infinite,
+               pzShow .15s ease .35s forwards;
     pointer-events: none;
+    will-change: transform, opacity;    /* GPU layer — no CPU jank on battery */
 }
+
+@keyframes pzShow { to { opacity: 1; } }
 
 /* Streamlit built-in spinner — match theme */
 .stSpinner > div > div { border-top-color: #64ffda !important; }
