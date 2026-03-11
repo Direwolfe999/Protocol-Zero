@@ -1,18 +1,19 @@
 """
-Protocol Zero — Nova 2 Sonic Voice Interface
-==============================================
-Real-time conversational voice AI using Amazon Nova 2 Sonic:
+Protocol Zero — Nova Voice & Text Intelligence
+=================================================
+Conversational AI interface powered by Amazon Nova Lite:
 
   1. Voice Status Reports — "Protocol Zero, what is my risk exposure?"
   2. Voice Kill-Switch  — "Protocol Zero, emergency stop!"
-  3. Verbal Risk Briefs — Synthesized audio reports of threats.
+  3. Verbal Risk Briefs — Text-based reports read via Web Speech API.
   4. Voice Trade Confirm — "Execute the trade" voice confirmation.
 
-Uses WebSocket bidirectional streaming for real-time speech-to-speech.
-
-Requires:
-    AWS credentials with Bedrock access to Nova 2 Sonic
-    (Falls back to text-based synthesis when unavailable)
+Architecture:
+    • Text reasoning via Nova Lite Converse API (``config.BEDROCK_MODEL_ID``)
+    • Browser-side TTS via the Web Speech API
+    • Nova Sonic S2S session is initialised for future audio I/O
+      but bidirectional audio frames are NOT wired yet.
+    • Falls back to rule-based text responses when AWS is unavailable.
 """
 
 from __future__ import annotations
@@ -181,8 +182,15 @@ class NovaSonicVoice:
         Start a bidirectional voice streaming session with Nova Sonic.
         Returns a session ID for the WebSocket connection.
 
-        In production, this opens a WebSocket to Bedrock's
-        bidirectional streaming endpoint for real-time speech-to-speech.
+        Nova Sonic is a speech-to-speech model that uses bidirectional
+        streaming via ``invoke_model_with_bidirectional_stream``.  The
+        exact request schema follows the Nova Sonic S2S API:
+
+            https://docs.aws.amazon.com/nova/latest/userguide/speech.html
+
+        When Bedrock credentials are unavailable or the streaming
+        endpoint is not yet provisioned, the system gracefully falls
+        back to text-mode intelligence (still fully functional).
         """
         self._session_id = hashlib.sha256(
             f"pz-voice-{time.time()}".encode()
@@ -190,44 +198,56 @@ class NovaSonicVoice:
 
         if self.enabled and self._client:
             logger.info("Starting Nova Sonic voice session: %s", self._session_id)
-            # Nova Sonic bidirectional streaming setup
-            # Uses Bedrock's invoke_model_with_bidirectional_stream
             try:
+                # Nova Sonic S2S bidirectional streaming
+                # Ref: Amazon Nova Sonic Developer Guide
+                session_config = {
+                    "inputAudioConfig": {
+                        "mediaType": "audio/lpcm",
+                        "sampleRateHertz": 16000,
+                        "singleChannel": True,
+                    },
+                    "outputAudioConfig": {
+                        "mediaType": "audio/lpcm",
+                        "sampleRateHertz": 24000,
+                        "singleChannel": True,
+                    },
+                    "textConfig": {
+                        "mediaType": "text/plain",
+                    },
+                    "sessionAttributes": {
+                        "systemPrompt": self.SYSTEM_PROMPT,
+                    },
+                }
                 self._stream_session = self._client.invoke_model_with_bidirectional_stream(
                     modelId=self.model_id,
-                    body=json.dumps({
-                        "inputConfig": {
-                            "audioInput": {
-                                "encoding": "pcm",
-                                "sampleRateHertz": 16000,
-                                "channelCount": 1,
-                            }
-                        },
-                        "outputConfig": {
-                            "audioOutput": {
-                                "encoding": "pcm",
-                                "sampleRateHertz": 24000,
-                                "channelCount": 1,
-                            }
-                        },
-                        "sessionConfig": {
-                            "systemPrompt": self.SYSTEM_PROMPT,
-                        }
-                    }),
+                    body=json.dumps(session_config),
                 )
                 logger.info("Nova Sonic stream session active")
             except Exception as e:
-                logger.warning("Bidirectional stream setup failed: %s — using text mode", e)
+                logger.warning(
+                    "Bidirectional stream setup failed: %s — using text mode. "
+                    "This is expected if Nova Sonic is not provisioned in your region.",
+                    e,
+                )
 
         return self._session_id
 
     def status(self) -> dict:
         """Return voice engine status for dashboard."""
+        if self.enabled:
+            # When AWS is ready, we use Nova Lite Converse for text reasoning
+            # and return text for browser-side Web Speech API playback.
+            # Nova Sonic S2S streaming is initialised but audio I/O is not
+            # wired — so the honest label is "Nova Lite".
+            mode = "Nova Lite (Text Intelligence + Web Speech)"
+        else:
+            mode = "Rule-Based (Text Fallback)"
         return {
             "enabled": True,  # Module is always functional (text or speech)
             "model": self.model_id,
             "aws_ready": config.AWS_READY,
-            "mode": "Nova Sonic (Live)" if self.enabled else "Nova Sonic (Text Intelligence)",
+            "mode": mode,
             "session_active": self._session_id is not None,
             "commands_supported": list(self.COMMANDS.keys()),
         }
@@ -236,15 +256,19 @@ class NovaSonicVoice:
 
     def _nova_sonic_respond(self, cmd: VoiceCommand, context: dict) -> VoiceResponse:
         """
-        Use Nova Sonic to generate an intelligent spoken response.
-        Leverages Nova's speech-to-speech for natural conversation.
+        Generate an intelligent text response using Nova Lite Converse API.
+
+        NOTE: This uses Nova Lite (``config.BEDROCK_MODEL_ID``) for text
+        reasoning, NOT Nova Sonic speech-to-speech.  The text is returned
+        to the dashboard for browser-side Web Speech API playback.
         """
         # Build context-aware prompt
         prompt = self._build_response_prompt(cmd, context)
 
         try:
+            # Nova Lite Converse API — text reasoning (not Sonic S2S)
             response = self._client.converse(
-                modelId=config.BEDROCK_MODEL_ID,  # Use Nova Lite for text reasoning
+                modelId=config.BEDROCK_MODEL_ID,  # Nova Lite for text reasoning
                 messages=[{
                     "role": "user",
                     "content": [{"text": prompt}],
@@ -263,35 +287,38 @@ class NovaSonicVoice:
 
     def _synthesize_speech(self, text: str, intent_handled: str = "") -> VoiceResponse:
         """
-        Synthesize speech audio from text using Nova Sonic.
-        Falls back to text-only if synthesis fails.
+        Polish text for spoken delivery using Nova Lite Converse API.
+
+        Uses Nova Lite (``config.BEDROCK_MODEL_ID``) to rewrite the raw
+        text into a concise spoken-form sentence, then returns the text
+        for browser-side Web Speech API playback.
+
+        No raw audio is generated — this is a text-to-polished-text step.
+        Falls back to the raw text if the API call fails.
         """
         try:
-            # Use Bedrock to synthesize speech with Nova Sonic
-            response = self._client.invoke_model(
-                modelId=self.model_id,
-                contentType="application/json",
-                accept="application/json",
-                body=json.dumps({
-                    "textInput": text,
-                    "outputConfig": {
-                        "encoding": "pcm",
-                        "sampleRateHertz": 24000,
-                    }
-                }),
+            # Use Nova Lite via Converse to produce polished spoken text,
+            # then let the browser handle TTS via the Web Speech API.
+            response = self._client.converse(
+                modelId=config.BEDROCK_MODEL_ID,
+                messages=[{
+                    "role": "user",
+                    "content": [{"text": f"Rewrite the following for a spoken voice alert. "
+                                         f"Keep it concise (2 sentences max):\n\n{text}"}],
+                }],
+                system=[{"text": self.SYSTEM_PROMPT}],
+                inferenceConfig={"maxTokens": 128, "temperature": 0.3},
             )
-            audio_bytes = response["body"].read()
-            audio_b64 = base64.b64encode(audio_bytes).decode()
+            spoken_text = response["output"]["message"]["content"][0]["text"]
 
             return VoiceResponse(
-                text=text,
-                audio_b64=audio_b64,
+                text=spoken_text,
                 intent_handled=intent_handled,
                 success=True,
                 timestamp=datetime.now(timezone.utc).isoformat(),
             )
         except Exception as e:
-            logger.warning("Speech synthesis failed: %s — returning text only", e)
+            logger.warning("Speech synthesis failed: %s — returning raw text", e)
             return VoiceResponse(
                 text=text,
                 intent_handled=intent_handled,
@@ -405,10 +432,19 @@ class NovaSonicVoice:
         eth = ctx.get("wallet_eth", 0)
         weth = ctx.get("wallet_weth", 0)
         usdc = ctx.get("wallet_usdc", 0)
+        # Use live ETH price from context if available, otherwise mark as unavailable
+        eth_price = ctx.get("eth_price_usd", 0)
+        if eth_price > 0:
+            total = eth * eth_price + weth * eth_price + usdc
+            return (
+                f"Wallet balances: {eth:.6f} ETH, {weth:.6f} WETH, "
+                f"and {usdc:.2f} USDC. "
+                f"Total estimated value: ${total:,.2f} (ETH @ ${eth_price:,.0f})."
+            )
         return (
             f"Wallet balances: {eth:.6f} ETH, {weth:.6f} WETH, "
             f"and {usdc:.2f} USDC. "
-            f"Total estimated value: ${eth * 3400 + weth * 3400 + usdc:,.2f}."
+            f"ETH price unavailable — USD estimate omitted."
         )
 
     def _build_alert_text(self, alert_type: str, details: dict) -> str:
