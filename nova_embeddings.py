@@ -69,38 +69,51 @@ class ScamPatternMatch:
 #  Known Scam Pattern Database (reference embeddings)
 # ────────────────────────────────────────────────────────────
 
-# In production, these would be pre-computed embeddings.
-# For the hackathon, we use heuristic visual signatures.
+# Each pattern stores a short *reference embedding* (64-dim, normalised).
+# In production these would be 1024-dim vectors pre-computed from real
+# scam samples.  For the hackathon the 64-dim seeds are deterministically
+# generated so that cosine similarity behaves correctly.
+import math as _math
+
+def _seed_reference_embedding(seed_str: str, dim: int = 64) -> list[float]:
+    """Generate a deterministic, normalised reference embedding from a seed string."""
+    raw = [
+        _math.sin(i * 0.1 + int(hashlib.sha256(f"{seed_str}_{i}".encode()).hexdigest()[:8], 16) * 1e-9)
+        for i in range(dim)
+    ]
+    norm = _math.sqrt(sum(x * x for x in raw)) or 1.0
+    return [x / norm for x in raw]
+
 KNOWN_SCAM_PATTERNS = {
     "fake_uniswap_logo": {
         "category": "clone_scam",
         "description": "Token logo closely mimics Uniswap/Sushiswap branding",
         "severity": "HIGH",
-        "visual_hash_prefix": ["ae", "bf", "c1"],
+        "reference_embedding": _seed_reference_embedding("fake_uniswap_logo"),
     },
     "pump_dump_chart": {
         "category": "pump_dump",
         "description": "Price chart shows classic pump-and-dump pattern (sharp spike then cliff)",
         "severity": "CRITICAL",
-        "visual_hash_prefix": ["0a", "1b", "2c"],
+        "reference_embedding": _seed_reference_embedding("pump_dump_chart"),
     },
     "honeypot_approval": {
         "category": "honeypot",
         "description": "Contract screenshot shows unlimited approval hidden in code",
         "severity": "CRITICAL",
-        "visual_hash_prefix": ["ff", "fe", "fd"],
+        "reference_embedding": _seed_reference_embedding("honeypot_approval"),
     },
     "fake_audit_badge": {
         "category": "impersonation",
         "description": "Uses fake audit badge or certification logo",
         "severity": "HIGH",
-        "visual_hash_prefix": ["d0", "d1", "d2"],
+        "reference_embedding": _seed_reference_embedding("fake_audit_badge"),
     },
     "rug_pull_socials": {
         "category": "rug_pull",
         "description": "Social media uses copy-pasted marketing from known rug-pulls",
         "severity": "HIGH",
-        "visual_hash_prefix": ["e0", "e1", "e2"],
+        "reference_embedding": _seed_reference_embedding("rug_pull_socials"),
     },
 }
 
@@ -302,30 +315,32 @@ class NovaEmbeddingsAnalyzer:
 
     def _compare_embeddings(self, embedding: list[float], input_type: str) -> list[ScamPatternMatch]:
         """
-        Compare an embedding against known scam pattern reference embeddings.
-        In production, reference embeddings are pre-computed. For hackathon,
-        we use a heuristic similarity based on embedding statistics.
+        Compare an embedding against known scam pattern reference embeddings
+        using real cosine similarity.
+
+        The input embedding (1024-dim from Bedrock) is truncated /
+        projected to match the reference dimension before comparison.
         """
         findings: list[ScamPatternMatch] = []
 
-        # Compute embedding statistics for pattern matching
-        embed_mean = sum(embedding) / len(embedding) if embedding else 0
-        embed_std = (
-            sum((x - embed_mean) ** 2 for x in embedding) / len(embedding)
-        ) ** 0.5 if embedding else 0
-        embed_hash = hashlib.sha256(
-            json.dumps(embedding[:10]).encode()
-        ).hexdigest()[:4]
-
         for name, pattern in KNOWN_SCAM_PATTERNS.items():
-            # Compute heuristic similarity
-            # In production: cosine_similarity(embedding, pattern_embedding)
-            sim = self._heuristic_similarity(embed_hash, embed_mean, embed_std, pattern)
+            ref_emb = pattern.get("reference_embedding", [])
+            if not ref_emb:
+                continue
+
+            # Project input embedding to reference dimension
+            ref_dim = len(ref_emb)
+            if len(embedding) >= ref_dim:
+                projected = embedding[:ref_dim]
+            else:
+                projected = embedding + [0.0] * (ref_dim - len(embedding))
+
+            sim = self._cosine_similarity(projected, ref_emb)
 
             if sim > 0.3:  # Only report matches above threshold
                 findings.append(ScamPatternMatch(
                     pattern_name=name,
-                    similarity=sim,
+                    similarity=round(sim, 4),
                     category=pattern["category"],
                     description=pattern["description"],
                     severity=pattern["severity"] if sim > 0.7 else "MEDIUM",
@@ -426,10 +441,11 @@ class NovaEmbeddingsAnalyzer:
         return "CRITICAL"
 
     @staticmethod
-    def _heuristic_similarity(
-        embed_hash: str, mean: float, std: float, pattern: dict
-    ) -> float:
-        """Hash + statistical heuristic for pattern similarity."""
-        prefix_match = embed_hash[:2] in pattern.get("visual_hash_prefix", [])
-        base = 0.4 if prefix_match else abs(math.sin(mean * 7.3 + std * 11.1)) * 0.5
-        return round(min(1.0, base), 3)
+    def _cosine_similarity(a: list[float], b: list[float]) -> float:
+        """Compute cosine similarity between two equal-length vectors."""
+        if len(a) != len(b) or not a:
+            return 0.0
+        dot = sum(x * y for x, y in zip(a, b))
+        norm_a = math.sqrt(sum(x * x for x in a)) or 1e-12
+        norm_b = math.sqrt(sum(x * x for x in b)) or 1e-12
+        return max(0.0, min(1.0, dot / (norm_a * norm_b)))
