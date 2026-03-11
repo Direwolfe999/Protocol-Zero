@@ -116,7 +116,7 @@ def generate_metadata(
         "type": "erc8004:registration-v1",
         "name": agent_name,
         "description": description,
-        "image": f"https://protocol-zero.agent/{config.AGENT_HANDLE}/avatar.png",
+        "image": f"ipfs://placeholder/{config.AGENT_HANDLE}/avatar.png",  # Replace with real IPFS CID after pinning
         "version": version,
 
         # ── Agent wallet ──────────────────────────────────
@@ -128,7 +128,7 @@ def generate_metadata(
                 "type": "trading",
                 "name": "Autonomous DeFi Trading",
                 "description": "AI-driven spot trading with risk management",
-                "endpoint": f"https://protocol-zero.agent/{config.AGENT_HANDLE}/api/trade",
+                "endpoint": f"http://localhost:8502/api/trade",  # Local dashboard — replace with production URL
                 "capabilities": capabilities,
                 "pricing": {
                     "model": "performance-fee",
@@ -140,7 +140,7 @@ def generate_metadata(
                 "type": "analysis",
                 "name": "Market Analysis",
                 "description": "Real-time market data analysis with AI reasoning",
-                "endpoint": f"https://protocol-zero.agent/{config.AGENT_HANDLE}/api/analyze",
+                "endpoint": f"http://localhost:8502/api/analyze",  # Local dashboard — replace with production URL
                 "capabilities": ["MARKET_ANALYSIS", "RISK_ASSESSMENT"],
             },
         ],
@@ -307,7 +307,11 @@ def save_metadata(
     metadata["ipfs_content_hash"] = compute_ipfs_cid_v1(metadata_copy)
 
     canonical = to_canonical_json(metadata)
-    output_path.write_text(canonical, encoding="utf-8")
+    try:
+        output_path.write_text(canonical, encoding="utf-8")
+    except OSError as exc:
+        logger.error("Failed to write metadata file %s: %s", output_path, exc)
+        raise
 
     logger.info("💾  Saved agent-identity.json → %s", output_path)
     logger.info("    keccak256      : %s", metadata["metadata_hash"])
@@ -350,7 +354,11 @@ def verify_metadata_file(file_path: Path | str = DEFAULT_OUTPUT_PATH) -> bool:
     Returns True if the hash matches, False otherwise.
     """
     file_path = Path(file_path)
-    data = json.loads(file_path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(file_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.error("Failed to read/parse metadata file %s: %s", file_path, exc)
+        return False
 
     stored_hash = data.pop("metadata_hash", None)
     data.pop("ipfs_content_hash", None)
@@ -386,8 +394,8 @@ if __name__ == "__main__":
     )
 
     print(f"\n  Agent        : {meta['name']}")
-    print(f"  Address      : {meta['agent_address']}")
-    print(f"  Capabilities : {', '.join(meta['capabilities'])}")
+    print(f"  Address      : {meta['agentAddress']}")
+    print(f"  Services     : {len(meta['services'])}")
     print(f"  Keccak-256   : {meta['metadata_hash']}")
     print(f"  IPFS Hash    : {meta['ipfs_content_hash']}")
     print(f"  File         : {DEFAULT_OUTPUT_PATH}")
