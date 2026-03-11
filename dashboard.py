@@ -1,5 +1,5 @@
 """
-Protocol Zero — Cinematic Dashboard v2.0
+Protocol Zero — Cinematic Dashboard v1.0
 ==========================================
 10+ features + full ERC-8004 integration + 5 innovative real-time panels.
 
@@ -24,10 +24,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import time
 from datetime import datetime, timezone, timedelta
 from typing import Any
+
+logger = logging.getLogger("protocol_zero.dashboard")
 
 import numpy as np
 import pandas as pd
@@ -63,8 +66,7 @@ except Exception:
 
 try:
     from risk_check import RiskState, run_all_checks, format_risk_report
-    _RISK_STATE = RiskState(max_position_usd=500.0, daily_loss_limit_usd=1000.0,
-                            max_open_positions=5)
+    _RISK_STATE = RiskState(max_position_usd=500.0, max_daily_loss_usd=1000.0)
     _HAS_RISK = True
 except Exception:
     _HAS_RISK = False
@@ -170,6 +172,50 @@ st.markdown("""
 }
 .mcard .d-up   { color: var(--accent-cyan); font-size: 0.8rem; }
 .mcard .d-down { color: var(--accent-red);  font-size: 0.8rem; }
+
+/* ── Module status grid ─────────────────────────────── */
+.mod-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 0.5rem 0 1rem 0;
+}
+.mod-card {
+    background: linear-gradient(135deg, #0c0c1f 0%, #111130 100%);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    transition: border-color 0.3s, transform 0.2s;
+}
+.mod-card:hover { border-color: var(--accent-cyan); transform: translateY(-2px); }
+.mod-card.mod-on  { border-left: 3px solid var(--accent-cyan); }
+.mod-card.mod-off { border-left: 3px solid var(--accent-red); opacity: 0.65; }
+.mod-card .mod-icon { font-size: 1.05rem; flex-shrink: 0; line-height: 1; }
+.mod-card .mod-name {
+    color: var(--text-muted);
+    font-size: clamp(0.6rem, 1.1vw, 0.82rem);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.mod-card .mod-tag {
+    margin-left: auto;
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+.mod-card.mod-on .mod-tag  { color: #64ffda; background: rgba(100,255,218,0.1); }
+.mod-card.mod-off .mod-tag { color: #ff6b6b; background: rgba(255,107,107,0.1); }
 
 /* ── Decision banners ───────────────────────────────── */
 .dec-box {
@@ -387,6 +433,13 @@ section[data-testid="stSidebar"] {
 
     /* Badges */
     .badge         { font-size: 0.6rem; padding: 0.12rem 0.45rem; }
+
+    /* Module grid */
+    .mod-grid      { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .mod-card      { padding: 0.6rem 0.8rem; border-radius: 10px; }
+    .mod-card .mod-name { font-size: clamp(0.55rem, 1vw, 0.72rem); }
+    .mod-card .mod-icon { font-size: 0.9rem; }
+    .mod-card .mod-tag  { font-size: 0.48rem; }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -435,6 +488,13 @@ section[data-testid="stSidebar"] {
 
     .badge         { font-size: 0.55rem; padding: 0.1rem 0.4rem; }
     .hz            { margin: 0.5rem 0; }
+
+    /* Module grid */
+    .mod-grid      { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .mod-card      { padding: 0.5rem 0.65rem; gap: 0.4rem; border-radius: 8px; }
+    .mod-card .mod-name { font-size: clamp(0.5rem, 0.9vw, 0.65rem); letter-spacing: 0.3px; }
+    .mod-card .mod-icon { font-size: 0.8rem; }
+    .mod-card .mod-tag  { font-size: 0.42rem; padding: 0.1rem 0.35rem; }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -500,6 +560,13 @@ section[data-testid="stSidebar"] {
     /* Streamlit tabs: smaller text */
     button[data-baseweb="tab"] { font-size: 0.65rem !important; padding: 0.4rem 0.5rem !important; }
 
+    /* Module grid — 2 cols on small phones */
+    .mod-grid      { grid-template-columns: repeat(2, 1fr); gap: 5px; }
+    .mod-card      { padding: 0.45rem 0.55rem; gap: 0.35rem; border-radius: 7px; }
+    .mod-card .mod-name { font-size: 0.52rem; letter-spacing: 0.2px; }
+    .mod-card .mod-icon { font-size: 0.72rem; }
+    .mod-card .mod-tag  { display: none; }
+
     /* Sidebar adjustments */
     section[data-testid="stSidebar"] {
         min-width: 200px !important;
@@ -524,6 +591,10 @@ section[data-testid="stSidebar"] {
     .xai-panel     { font-size: 0.55rem; padding: 0.4rem 0.5rem; }
     .router-step   { min-width: 55px; font-size: 0.48rem; padding: 0.3rem; }
     .sim-row       { font-size: 0.58rem; }
+    .mod-grid      { grid-template-columns: repeat(2, 1fr); gap: 4px; }
+    .mod-card      { padding: 0.35rem 0.45rem; gap: 0.25rem; }
+    .mod-card .mod-name { font-size: 0.46rem; }
+    .mod-card .mod-icon { font-size: 0.65rem; }
     button[data-baseweb="tab"] { font-size: 0.55rem !important; padding: 0.3rem 0.35rem !important; }
 }
 
@@ -685,9 +756,20 @@ section.main, section.main *,
 #  Session State Defaults
 # ════════════════════════════════════════════════════════════
 
+# Derive real wallet address from private key
+_AGENT_WALLET = "0x0000000000000000000000000000000000000000"
+if _HAS_CHAIN and _CHAIN is not None:
+    _AGENT_WALLET = _CHAIN.address
+else:
+    try:
+        from eth_account import Account as _Acct
+        _AGENT_WALLET = _Acct.from_key(config.PRIVATE_KEY).address
+    except Exception:
+        pass
+
 _DEFAULTS: dict[str, Any] = {
     "agent_name":       "ProtocolZero",
-    "agent_wallet":     "0x71C7656EC7ab88b098defB751B7401B5f6d8976F",
+    "agent_wallet":     _AGENT_WALLET,
     "reputation_score": 95,
     "agent_registered": False,
     "autonomous_mode":  False,
@@ -724,6 +806,8 @@ _DEFAULTS: dict[str, Any] = {
     "on_chain_rep_count":  0,
     "on_chain_val_count":  0,
     "trust_history":       [],
+    "last_reg_tx":         None,
+    "analysis_latency_ms": 0,
 
     # ── Performance Analytics ──────────────────────────
     "perf_sharpe":         0.0,
@@ -777,9 +861,10 @@ def _fetch_on_chain_reputation() -> dict:
         return {"score": None, "count": 0, "error": "Chain not available"}
     try:
         summary = _CHAIN.get_reputation_summary()
-        return {"score": summary.get("averageValue"), "count": summary.get("feedbackCount", 0),
+        return {"score": summary.get("cumulative_value"), "count": summary.get("total_feedback", 0),
                 "error": None}
     except Exception as e:
+        logger.warning("Reputation fetch failed: %s", e)
         return {"score": None, "count": 0, "error": str(e)}
 
 
@@ -789,9 +874,10 @@ def _fetch_validation_summary() -> dict:
         return {"total": 0, "approved": 0, "error": "Chain not available"}
     try:
         summary = _CHAIN.get_validation_summary()
-        return {"total": summary.get("totalRequests", 0),
-                "approved": summary.get("approvedCount", 0), "error": None}
+        return {"total": summary.get("total_requests", 0),
+                "approved": summary.get("approved", 0), "error": None}
     except Exception as e:
+        logger.warning("Validation summary fetch failed: %s", e)
         return {"total": 0, "approved": 0, "error": str(e)}
 
 
@@ -813,8 +899,8 @@ def _load_artifacts() -> list[dict]:
         for f in sorted(art_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:20]:
             try:
                 artifacts.append(json.loads(f.read_text()))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to load artifact %s: %s", f.name, e)
     return artifacts
 
 
@@ -836,38 +922,56 @@ def _real_execute_trade(decision: dict, df: pd.DataFrame) -> dict:
     """Execute trade through the real pipeline: risk_check → sign_trade → chain."""
     result = {"success": False, "tx": None, "sig": None, "pnl": 0.0,
               "risk_report": "", "error": None}
+    _timings: dict[str, float] = {}  # pipeline waterfall (ms)
+
+    # Raw intermediate results for downstream consumers
+    risk_results_raw: tuple[bool, list[str]] | None = None
+    sign_result_raw: dict | None = None
 
     # Step 1: Risk checks
+    _t0 = time.perf_counter()
     if _HAS_RISK and _RISK_STATE is not None:
         try:
-            risk_ok, risk_report = run_all_checks(decision, _RISK_STATE)
-            result["risk_report"] = format_risk_report(risk_report)
+            risk_ok, risk_msgs = run_all_checks(_RISK_STATE, decision)
+            risk_results_raw = (risk_ok, risk_msgs)
+            result["risk_report"] = format_risk_report(risk_msgs)
             if not risk_ok:
                 result["error"] = "Risk checks failed"
                 return result
         except Exception as e:
+            logger.warning("Risk check error: %s", e, exc_info=True)
             result["error"] = f"Risk check error: {e}"
 
+    _timings["🛡️ Risk Check"] = (time.perf_counter() - _t0) * 1000
+
     # Step 2: EIP-712 signing
+    _t0 = time.perf_counter()
     if _HAS_SIGN:
         try:
-            sign_result = validate_and_sign(decision)
-            if sign_result.get("approved"):
-                result["sig"] = sign_result.get("signature", "")
+            sign_result_raw = validate_and_sign(decision)
+            if sign_result_raw.get("status") == "signed" and sign_result_raw.get("signed"):
+                result["sig"] = sign_result_raw["signed"].get("signature", "")
             else:
-                result["error"] = f"Signing rejected: {sign_result.get('rejection_reason', 'unknown')}"
+                errors = sign_result_raw.get("validation", {}).get("errors", [])
+                reason = "; ".join(errors) if errors else sign_result_raw.get("status", "unknown")
+                result["error"] = f"Signing rejected: {reason}"
                 return result
         except Exception as e:
+            logger.warning("Signing error: %s", e, exc_info=True)
             result["error"] = f"Signing error: {e}"
             # Fall through — we can still show the attempt
 
+    _timings["🔏 EIP-712 Sign"] = (time.perf_counter() - _t0) * 1000
+
     # Step 3: On-chain submission
+    _t0 = time.perf_counter()
     if _HAS_CHAIN and _CHAIN is not None and result.get("sig"):
         try:
             tx = _CHAIN.submit_intent(decision, result["sig"])
             result["tx"] = tx
             result["success"] = True
         except Exception as e:
+            logger.warning("Chain submission error: %s", e, exc_info=True)
             result["error"] = f"Chain submission error: {e}"
 
     # Step 3b: DEX swap (Uniswap V3 — real token execution)
@@ -885,14 +989,17 @@ def _real_execute_trade(decision: dict, df: pd.DataFrame) -> dict:
                     st.session_state["wallet_eth"] = bals["eth"]
                     st.session_state["wallet_weth"] = bals["weth"]
                     st.session_state["wallet_usdc"] = bals["usdc"]
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("DEX balance refresh failed: %s", e)
             else:
                 result["swap_error"] = swap.error
         except Exception as e:
             result["swap_error"] = f"DEX error: {e}"
 
+    _timings["⛓️ On-Chain TX"] = (time.perf_counter() - _t0) * 1000
+
     # Step 4: Build validation artifact
+    _t0 = time.perf_counter()
     if _HAS_ARTIFACTS and _ARTIFACTS is not None:
         try:
             market_snapshot = {
@@ -902,26 +1009,43 @@ def _real_execute_trade(decision: dict, df: pd.DataFrame) -> dict:
             }
             _ARTIFACTS.build_artifact(
                 decision=decision,
-                market_snapshot=market_snapshot,
-                risk_report=result.get("risk_report", ""),
-                signature=result.get("sig", ""),
+                market_data=market_snapshot,
+                risk_results=risk_results_raw,
+                signed_intent=sign_result_raw,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Artifact build failed: %s", e)
+
+    _timings["📋 Artifact"] = (time.perf_counter() - _t0) * 1000
 
     # Step 5: Record in performance tracker
+    _t0 = time.perf_counter()
     if _HAS_PERF and _PERF is not None:
         try:
+            current_price = float(df["close"].iloc[-1])
+            # Estimate PnL from trailing candle return (price change * position)
+            pnl_estimate = 0.0
+            if df is not None and len(df) >= 2 and decision.get("action") in ("BUY", "SELL"):
+                prev_price = float(df["close"].iloc[-2])
+                price_return = (current_price - prev_price) / prev_price if prev_price else 0
+                amount = decision.get("amount_usd", 0)
+                # BUY profits when price rises, SELL profits when price falls
+                direction = 1.0 if decision.get("action") == "BUY" else -1.0
+                pnl_estimate = round(amount * price_return * direction, 2)
             _PERF.record_trade(
                 action=decision.get("action", "HOLD"),
                 asset=decision.get("asset", "?"),
-                entry_price=float(df["close"].iloc[-1]),
+                entry_price=current_price,
                 amount_usd=decision.get("amount_usd", 0),
+                pnl_usd=pnl_estimate,
                 confidence=decision.get("confidence", 0.5),
-                regime=decision.get("market_regime", "UNCERTAIN"),
+                market_regime=decision.get("market_regime", "UNCERTAIN"),
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Performance tracking failed: %s", e)
+
+    _timings["📊 Perf Track"] = (time.perf_counter() - _t0) * 1000
+    result["pipeline_timings"] = _timings
 
     return result
 
@@ -1082,8 +1206,8 @@ def run_analysis(df: pd.DataFrame, pair: str, vol_mult: float = 1.0) -> dict:
     try:
         from brain import invoke_brain as _invoke  # type: ignore
         decision = _invoke(df=df)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.info("Brain invocation unavailable, using heuristic fallback: %s", e)
 
     if decision is not None:
         return {
@@ -1473,6 +1597,7 @@ with st.sidebar:
                 st.session_state["agent_registered"] = True
                 tx = reg_result["tx"] or "pending"
                 tx_display = tx if isinstance(tx, str) else str(tx)
+                st.session_state["last_reg_tx"] = tx_display
                 _cog("▣", f"TX: {tx_display[:24]}…", "sym")
                 _cog("✓", "Agent registered on ERC-8004 Identity Registry", "ok")
                 st.session_state["tx_log"].append({
@@ -1496,6 +1621,30 @@ with st.sidebar:
                 })
                 st.warning(f"Chain unavailable — registered locally. Error: {err}")
         st.rerun()
+
+    # ── On-Chain Proof Links ──────────────────────────────
+    if st.session_state["agent_registered"]:
+        _explorer_base = "https://sepolia.etherscan.io"
+        _wallet = st.session_state["agent_wallet"]
+        _reg_tx = st.session_state.get("last_reg_tx")
+        st.markdown(
+            f'<div style="background:#050510;border:1px solid #1a1a3e;border-radius:10px;'
+            f'padding:0.6rem 0.8rem;margin:0.4rem 0;font-size:0.68rem">'
+            f'<div style="color:#64ffda;font-weight:700;margin-bottom:4px">'
+            f'🔗 On-Chain Proof</div>'
+            f'<div style="margin:2px 0"><a href="{_explorer_base}/address/{_wallet}" '
+            f'target="_blank" style="color:#4fc3f7;text-decoration:none">'
+            f'📋 Agent Wallet ↗</a></div>'
+            + (f'<div style="margin:2px 0"><a href="{_explorer_base}/tx/{_reg_tx}" '
+               f'target="_blank" style="color:#4fc3f7;text-decoration:none">'
+               f'🧾 Registration TX ↗</a></div>' if _reg_tx else '')
+            + f'<div style="margin:2px 0"><a href="{_explorer_base}/address/'
+              f'{config.IDENTITY_REGISTRY_ADDRESS}" target="_blank" '
+              f'style="color:#4fc3f7;text-decoration:none">'
+              f'🏛️ Identity Registry ↗</a></div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 
@@ -1583,8 +1732,8 @@ with st.sidebar:
                 st.session_state["wallet_weth"] = _sb.get("weth", 0.0)
                 st.session_state["wallet_usdc"] = _sb.get("usdc", 0.0)
                 st.session_state["_dex_bal_ts"] = _dex_now
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("DEX balance refresh failed: %s", e)
         st.markdown(
             f'<div class="mcard">'
             f'<div class="lbl">Wallet Balances</div>'
@@ -1632,7 +1781,7 @@ st.markdown(
     '# 🛡️ Protocol Zero '
     '<span style="font-size:clamp(0.35rem, 1.5vw, 0.55rem);color:#495670;font-weight:400;'
     'display:inline-block;word-break:break-word">'
-    'v2.0 · Autonomous Agent · ERC-8004 · '
+    'v1.0 · Autonomous Agent · ERC-8004 · '
     f'{"🟢" if _HAS_CHAIN else "🔴"} Chain '
     f'{"🟢" if _HAS_SIGN else "🔴"} Sign '
     f'{"🟢" if _HAS_PERF else "🔴"} Perf '
@@ -1640,6 +1789,55 @@ st.markdown(
     f'{"🟢" if _HAS_NOVA_SONIC else "🔴"} Sonic '
     f'{"🟢" if _HAS_NOVA_EMBED else "🔴"} Embed'
     '</span>',
+    unsafe_allow_html=True,
+)
+
+# ── Live System Health Heartbeat ──────────────────────
+@st.cache_data(ttl=60, show_spinner=False)
+def _system_health_check():
+    """Ping real subsystems and return status + latency."""
+    checks: dict[str, tuple[str, str, int]] = {}  # name → (icon, status, ms)
+
+    # CCXT / Binance public API
+    _t = time.perf_counter()
+    try:
+        import ccxt as _ccxt_hc  # noqa: F811
+        _ccxt_hc.binance({"enableRateLimit": True}).fetch_ticker("ETH/USDT")
+        checks["Binance Feed"] = ("📡", "LIVE", round((time.perf_counter() - _t) * 1000))
+    except Exception:
+        checks["Binance Feed"] = ("📡", "OFF", 0)
+
+    # Sepolia RPC
+    _t = time.perf_counter()
+    try:
+        from web3 import Web3 as _W3hc  # noqa: F811
+        _w3 = _W3hc(_W3hc.HTTPProvider(os.getenv("RPC_URL", ""), request_kwargs={"timeout": 4}))
+        _w3.eth.block_number
+        checks["Sepolia RPC"] = ("⛓️", "LIVE", round((time.perf_counter() - _t) * 1000))
+    except Exception:
+        checks["Sepolia RPC"] = ("⛓️", "OFF", 0)
+
+    # AWS Bedrock
+    _aws_ok = all(os.getenv(k, "").startswith(("AK", "SK")) is False
+                   and os.getenv(k, "") not in ("", "your_aws_access_key", "your_aws_secret_key")
+                   for k in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"))
+    checks["AWS Bedrock"] = ("🧠", "READY" if _aws_ok else "FALLBACK", 0)
+
+    return checks
+
+_hc = _system_health_check()
+_hc_html_parts = []
+for _hc_name, (_hc_icon, _hc_st, _hc_ms) in _hc.items():
+    _hc_color = "#64ffda" if _hc_st == "LIVE" or _hc_st == "READY" else "#ffd740" if _hc_st == "FALLBACK" else "#ff6b6b"
+    _hc_ms_str = f" · {_hc_ms}ms" if _hc_ms > 0 else ""
+    _hc_html_parts.append(
+        f'<span style="display:inline-block;padding:0.2rem 0.6rem;margin:0.1rem 0.25rem;'
+        f'border:1px solid {_hc_color}33;border-radius:6px;font-size:0.7rem;color:{_hc_color}">'
+        f'{_hc_icon} {_hc_name}: <b>{_hc_st}</b>{_hc_ms_str}</span>'
+    )
+st.markdown(
+    '<div style="display:flex;flex-wrap:wrap;justify-content:center;margin:-0.3rem 0 0.5rem">'
+    + "".join(_hc_html_parts) + '</div>',
     unsafe_allow_html=True,
 )
 
@@ -1830,9 +2028,13 @@ with tab_brain:
             _cog("▣", f"Analysis cycle initiated — pair {st.session_state['selected_pair']}", "info")
             _cog("▣", "Regime detection: scanning SMA/RSI/Vol matrix", "info")
 
+            import time as _time_mod
+            _t0 = _time_mod.perf_counter()
             decision = run_analysis(
                 df, st.session_state["selected_pair"],
                 st.session_state["whatif_vol_mult"])
+            _t1 = _time_mod.perf_counter()
+            st.session_state["analysis_latency_ms"] = round((_t1 - _t0) * 1000)
 
             _cog("▣", f"Regime classified: {decision['market_regime']}", "sym")
             vol_val = df["volatility"].iloc[-1]
@@ -1850,6 +2052,7 @@ with tab_brain:
                        else ("err" if decision["action"] == "SELL" else "warn"))
                 _cog("▣", f"Signal: {decision['action']} {decision['asset']}", lvl)
             _cog("✓", "Analysis cycle complete", "ok")
+            _cog("⏱", f"Latency: {st.session_state['analysis_latency_ms']}ms", "info")
 
             st.session_state["latest_decision"] = decision
             st.session_state["decision_history"].append({
@@ -1858,6 +2061,15 @@ with tab_brain:
             })
 
     # Display latest decision
+    _lat = st.session_state.get("analysis_latency_ms", 0)
+    if _lat > 0:
+        _lat_c = "#64ffda" if _lat < 500 else ("#ffd93d" if _lat < 2000 else "#ff6b6b")
+        st.markdown(
+            f'<div style="display:inline-block;background:#050510;border:1px solid #1a1a3e;'
+            f'border-radius:8px;padding:0.25rem 0.7rem;font-size:0.7rem;'
+            f'font-family:JetBrains Mono,monospace;color:{_lat_c};margin-bottom:0.5rem">'
+            f'⏱ {_lat}ms</div>',
+            unsafe_allow_html=True)
     dec = st.session_state.get("latest_decision")
     if dec:
         action = dec["action"]
@@ -2015,7 +2227,7 @@ with tab_risk:
                               "", sim_dec["risk_score"] <= 5), unsafe_allow_html=True)
 
         if (sim_dec["action"] == "HOLD"
-                and st.session_state.get("latest_decision", {}).get("action") != "HOLD"):
+                and (st.session_state.get("latest_decision") or {}).get("action") != "HOLD"):
             st.warning("🔮 At this volatility, the agent would **HOLD** instead of "
                        "trading. Risk-adaptive behavior confirmed.")
     else:
@@ -2137,9 +2349,20 @@ with tab_risk:
                 if exec_result.get("risk_report"):
                     _cog("▣", "Risk report generated", "ok")
 
-                # PnL estimation from market movement
-                rng = np.random.default_rng(int(time.time()) % 100_000)
-                pnl = round(float(rng.uniform(-40, 90)), 2)
+                # ── PnL estimation from actual price movement ──
+                # Use trailing candle returns so PnL correlates
+                # with real market data instead of random noise.
+                _recent_ret = float(df["pct_change"].dropna().tail(5).mean()) if len(df) > 5 else 0.0
+                _trade_amt  = dec.get("amount_usd", 100.0)
+                if dec["action"] == "BUY":
+                    pnl = round(_trade_amt * _recent_ret / 100.0, 2)
+                elif dec["action"] == "SELL":
+                    pnl = round(_trade_amt * -_recent_ret / 100.0, 2)
+                else:
+                    pnl = 0.0
+                # Clamp to ±5 % of trade size for realism
+                _cap = _trade_amt * 0.05
+                pnl = max(-_cap, min(_cap, pnl))
                 st.session_state["session_pnl"] += pnl
                 st.session_state["trade_count"] += 1
 
@@ -2147,11 +2370,13 @@ with tab_risk:
                 if _HAS_CHAIN and _CHAIN is not None:
                     try:
                         _CHAIN.log_trade_result(
-                            outcome="profit" if pnl > 0 else "loss",
-                            details=f"PnL: ${pnl:+.2f}")
+                            action_type=dec.get("action", "HOLD"),
+                            pnl_bps=int(pnl * 100),
+                            metadata=json.dumps({"pnl_usd": pnl, "asset": dec.get("asset", "")}),
+                        )
                         _cog("▣", "Reputation feedback submitted on-chain", "ok")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("Reputation feedback failed: %s", e)
 
                 st.session_state["reputation_score"] = max(
                     0, min(100, st.session_state["reputation_score"]
@@ -2197,6 +2422,32 @@ with tab_risk:
             if _sw and isinstance(_sw, dict) and _sw.get("success"):
                 dex_msg = f" · 💱 DEX Swap: {_sw.get('amount_in', 0):.6f} {_sw.get('token_in', '')} → {_sw.get('amount_out', 0):.6f} {_sw.get('token_out', '')}"
             st.success(f"Trade executed {status_label}! TX: `{tx[:28]}…` · PnL: **${pnl:+.2f}**{dex_msg}")
+
+            # ── Pipeline Execution Waterfall ──────────────
+            _ptimings = exec_result.get("pipeline_timings")
+            if _ptimings:
+                st.session_state["last_pipeline_timings"] = _ptimings
+                _labels = list(reversed(_ptimings.keys()))
+                _values = list(reversed(_ptimings.values()))
+                _colors = ["#64ffda" if v < 50 else "#ffd740" if v < 200 else "#ff6b6b" for v in _values]
+                _wf_fig = go.Figure(go.Bar(
+                    y=_labels, x=_values, orientation="h",
+                    marker_color=_colors,
+                    text=[f"{v:.0f} ms" for v in _values],
+                    textposition="auto",
+                    textfont=dict(color="#e0e6ed", size=11),
+                ))
+                _wf_fig.update_layout(
+                    title=dict(text="⏱️ Pipeline Execution Waterfall", font=dict(color="#e0e6ed", size=14)),
+                    xaxis_title="Latency (ms)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#8892a4"),
+                    height=220, margin=dict(l=0, r=20, t=40, b=30),
+                    xaxis=dict(gridcolor="rgba(100,255,218,0.08)"),
+                )
+                st.plotly_chart(_wf_fig, use_container_width=True)
+
             if pnl > 0:
                 st.balloons()
             st.rerun()
@@ -2246,14 +2497,25 @@ with tab_log:
             f"Reputation: **{st.session_state['reputation_score']}/100**"
         )
 
-        if st.button("🗑  Clear Log"):
-            st.session_state["tx_log"]            = []
-            st.session_state["session_pnl"]       = 0.0
-            st.session_state["trade_count"]       = 0
-            st.session_state["decision_history"]  = []
-            st.session_state["cognitive_log"]     = []
-            st.session_state["latest_decision"]   = None
-            st.rerun()
+        _dl_col, _clr_col = st.columns(2)
+        with _dl_col:
+            _csv = log_df.to_csv(index=False)
+            st.download_button(
+                "📥  Export CSV",
+                data=_csv,
+                file_name=f"protocol_zero_txlog_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        with _clr_col:
+            if st.button("🗑  Clear Log", use_container_width=True):
+                st.session_state["tx_log"]            = []
+                st.session_state["session_pnl"]       = 0.0
+                st.session_state["trade_count"]       = 0
+                st.session_state["decision_history"]  = []
+                st.session_state["cognitive_log"]     = []
+                st.session_state["latest_decision"]   = None
+                st.rerun()
     else:
         st.markdown(
             '<div style="text-align:center;padding:3rem;color:#495670">'
@@ -2413,6 +2675,98 @@ with tab_trust:
     st.markdown("### 🌐 ERC-8004 On-Chain Trust Panel")
     st.caption("Live trust data from Identity, Reputation, and Validation Registries on Sepolia")
 
+    # ── Architecture Pipeline Diagram ──────────────────────
+    _pipe_steps = [
+        ("📡", "Market Data", "CCXT Live", _HAS_CHAIN),
+        ("🧠", "Nova Brain", "Tool-Use Loop", True),
+        ("🛡️", "Risk Gate", "6 Checks", _HAS_RISK),
+        ("🔏", "EIP-712", "Sign Intent", _HAS_SIGN),
+        ("⛓️", "On-Chain", "Sepolia TX", _HAS_CHAIN),
+        ("📋", "Artifact", "keccak256", _HAS_ARTIFACTS),
+    ]
+    _pipe_html = ""
+    for _i, (_ico, _lbl, _sub, _ok) in enumerate(_pipe_steps):
+        _scls = "pass" if _ok else "fail"
+        _pipe_html += (
+            f'<div class="router-step {_scls}">'
+            f'{_ico}<br><b>{_lbl}</b><br>'
+            f'<span style="font-size:0.55rem;opacity:0.7">{_sub}</span></div>'
+        )
+        if _i < len(_pipe_steps) - 1:
+            _pipe_html += '<div class="router-arrow">→</div>'
+    st.markdown(
+        '<div style="display:flex;align-items:center;justify-content:center;'
+        'flex-wrap:wrap;padding:0.8rem 0;margin-bottom:0.5rem">'
+        + _pipe_html + '</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
+
+    # ── Nova AI Integration Status ─────────────────────
+    st.markdown("#### 🤖 Amazon Nova Integration Status")
+    st.caption("Transparent status of each Nova service — live vs. fallback")
+
+    _nova_services = []
+    # Nova Lite (Brain)
+    _nova_services.append({
+        "name": "Nova Lite (Brain)",
+        "icon": "🧠",
+        "status": "LIVE" if config.AWS_READY else "FALLBACK",
+        "detail": "Converse API + tool-use loop" if config.AWS_READY else "Rule-based RSI/SMA engine",
+        "model": config.BEDROCK_MODEL_ID,
+    })
+    # Nova Sonic / Voice
+    _voice_status = _VOICE.status() if _HAS_VOICE else {"mode": "Module not loaded"}
+    _nova_services.append({
+        "name": "Nova Voice / Sonic",
+        "icon": "🎙️",
+        "status": "LITE+TTS" if config.AWS_READY else "TEXT-ONLY",
+        "detail": _voice_status.get("mode", "Unknown"),
+        "model": config.NOVA_SONIC_MODEL_ID if hasattr(config, "NOVA_SONIC_MODEL_ID") else "—",
+    })
+    # Nova Act
+    _act_status = {"method": "Module not loaded"}
+    if "_ACT" not in dir():
+        try:
+            from nova_act_auditor import NovaActAuditor as _TmpAct
+            _act_status = _TmpAct().status()
+        except Exception:
+            pass
+    _nova_services.append({
+        "name": "Nova Act (Auditor)",
+        "icon": "🔍",
+        "status": "LIVE" if _act_status.get("live_mode") else "SIMULATED",
+        "detail": _act_status.get("method", "Simulated"),
+        "model": "nova-act SDK (invite-only)",
+    })
+    # Nova Embeddings
+    _embed_status = {"mode": "Module not loaded"}
+    try:
+        from nova_embeddings import NovaEmbeddingsAnalyzer as _TmpEmb
+        _embed_status = _TmpEmb().status()
+    except Exception:
+        pass
+    _nova_services.append({
+        "name": "Nova Embeddings",
+        "icon": "🔬",
+        "status": "LIVE" if _embed_status.get("enabled") else "HEURISTIC",
+        "detail": _embed_status.get("mode", "Unknown"),
+        "model": config.NOVA_EMBED_MODEL_ID if hasattr(config, "NOVA_EMBED_MODEL_ID") else "—",
+    })
+
+    _nc = st.columns(len(_nova_services))
+    for _ci, _svc in enumerate(_nova_services):
+        with _nc[_ci]:
+            _sc = "#64ffda" if _svc["status"] == "LIVE" else "#ffd93d" if _svc["status"] in ("LITE+TTS", "HEURISTIC") else "#ff6b6b"
+            st.markdown(f"""<div class="mcard" style="border-left: 3px solid {_sc}">
+                <div style="font-size:1.2rem;text-align:center">{_svc['icon']}</div>
+                <div class="lbl">{_svc['name']}</div>
+                <div class="val" style="color:{_sc};font-size:0.85rem">{_svc['status']}</div>
+                <div style="color:#495670;font-size:0.6rem;margin-top:4px">{_svc['detail']}</div>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
+
     # ── Refresh trust data (cached — only fetch on click) ─
     if "_trust_cache" not in st.session_state:
         st.session_state["_trust_cache"] = {
@@ -2541,14 +2895,19 @@ with tab_trust:
         ("Nova Sonic", _HAS_NOVA_SONIC),
         ("Nova Embed", _HAS_NOVA_EMBED),
     ]
-    cols = st.columns(len(modules))
-    for i, (name, connected) in enumerate(modules):
-        with cols[i]:
-            icon = "🟢" if connected else "🔴"
-            st.markdown(f"""<div class="mcard">
-                <div class="lbl">{name}</div>
-                <div class="val" style="font-size:1rem">{icon}</div>
-            </div>""", unsafe_allow_html=True)
+    _mod_cards = ""
+    for name, connected in modules:
+        icon = "🟢" if connected else "🔴"
+        cls = "mod-on" if connected else "mod-off"
+        tag = "LIVE" if connected else "OFF"
+        _mod_cards += (
+            f'<div class="mod-card {cls}">'
+            f'<span class="mod-icon">{icon}</span>'
+            f'<span class="mod-name">{name}</span>'
+            f'<span class="mod-tag">{tag}</span>'
+            f'</div>'
+        )
+    st.markdown(f'<div class="mod-grid">{_mod_cards}</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 
@@ -2563,8 +2922,8 @@ with tab_trust:
                 st.session_state["wallet_weth"] = _bal.get("weth", 0.0)
                 st.session_state["wallet_usdc"] = _bal.get("usdc", 0.0)
                 st.session_state["_dex_bal_ts"] = _dex_t
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("DEX balance refresh failed: %s", e)
     dex_status_icon = "🟢 ENABLED" if st.session_state.get("dex_enabled") else "🔴 DISABLED"
     dex_sc = "#64ffda" if st.session_state.get("dex_enabled") else "#ff6b6b"
     wc1, wc2, wc3, wc4 = st.columns(4)
@@ -2716,6 +3075,8 @@ with tab_perf:
     # ── Rolling Volatility ─────────────────────────────
     st.markdown("#### 📉 Portfolio Rolling Volatility")
     rolling_vol = perf_report.get("rolling_volatility", [])
+    if not isinstance(rolling_vol, (list, tuple)):
+        rolling_vol = []
     if rolling_vol and len(rolling_vol) > 2:
         fig_rv = go.Figure()
         fig_rv.add_trace(go.Scatter(
@@ -2765,6 +3126,13 @@ with tab_audit:
 
     if artifacts:
         st.markdown(f"**{len(artifacts)}** validation artifacts on disk")
+        _art_json = json.dumps(artifacts, indent=2, default=str)
+        st.download_button(
+            "📥  Export Artifacts (JSON)",
+            data=_art_json,
+            file_name=f"protocol_zero_artifacts_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M')}.json",
+            mime="application/json",
+        )
         st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 
         for i, art in enumerate(artifacts[:10]):
@@ -3640,7 +4008,7 @@ st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 st.markdown("""
 <div style="text-align:center;color:#3a3a5c;font-size:clamp(0.45rem,1.2vw,0.7rem);
             padding:0.5rem;word-break:break-word;line-height:1.6">
-    Protocol Zero v2.0 &nbsp;·&nbsp; Autonomous Agent &nbsp;·&nbsp;
+    Protocol Zero v1.0 &nbsp;·&nbsp; Autonomous Agent &nbsp;·&nbsp;
     ERC-8004 Compliant &nbsp;·&nbsp; EIP-712 Signed Intents &nbsp;·&nbsp;
     Nova Lite (Bedrock) &nbsp;·&nbsp; Nova Act &nbsp;·&nbsp;
     Nova Sonic &nbsp;·&nbsp; Nova Embeddings &nbsp;·&nbsp;
@@ -3648,3 +4016,75 @@ st.markdown("""
     Validation Artifacts &nbsp;·&nbsp; Hackathon 2025/2026
 </div>
 """, unsafe_allow_html=True)
+
+# ════════════════════════════════════════════════════════════
+#  Auto-Refresh — Autonomous Mode Live Loop
+# ════════════════════════════════════════════════════════════
+
+if st.session_state.get("autonomous_mode") and not st.session_state.get("kill_switch_active"):
+    _auto_interval = 30  # seconds between autonomous cycles
+    _last_auto = st.session_state.get("_last_auto_run", 0)
+    _now_ts = time.time()
+
+    if _now_ts - _last_auto >= _auto_interval:
+        # ── Run an autonomous analysis + trade cycle ──────
+        _auto_pair = st.session_state.get("selected_pair", "ETH/USDT")
+        _auto_df = st.session_state.get("market_df")
+        if _auto_df is not None and len(_auto_df) > 0:
+            try:
+                _auto_dec = run_analysis(_auto_df, _auto_pair)
+                st.session_state["latest_decision"] = _auto_dec
+                st.session_state["decision_history"].append({
+                    "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                    "action": _auto_dec["action"],
+                    "asset": _auto_dec["asset"],
+                    "confidence": _auto_dec["confidence"],
+                    "regime": _auto_dec.get("market_regime", "?"),
+                    "reasoning": _auto_dec.get("entry_reasoning", ""),
+                })
+                _cog("🤖", f"Autonomous cycle: {_auto_dec['action']} "
+                     f"{_auto_dec['asset']} @ {_auto_dec['confidence']:.0%}", "info")
+
+                # Auto-execute if confidence threshold met
+                if _auto_dec["action"] != "HOLD" and _auto_dec["confidence"] >= 0.6:
+                    _auto_exec = _real_execute_trade(_auto_dec, _auto_df)
+                    _recent_ret = float(_auto_df["pct_change"].dropna().tail(5).mean()) if len(_auto_df) > 5 else 0.0
+                    _trade_amt = _auto_dec.get("amount_usd", 100.0)
+                    if _auto_dec["action"] == "BUY":
+                        _auto_pnl = round(_trade_amt * _recent_ret / 100.0, 2)
+                    elif _auto_dec["action"] == "SELL":
+                        _auto_pnl = round(_trade_amt * -_recent_ret / 100.0, 2)
+                    else:
+                        _auto_pnl = 0.0
+                    _cap = _trade_amt * 0.05
+                    _auto_pnl = max(-_cap, min(_cap, _auto_pnl))
+
+                    st.session_state["session_pnl"] += _auto_pnl
+                    st.session_state["trade_count"] += 1
+
+                    _auto_sig = _auto_exec.get("sig") or "auto"
+                    _auto_tx = _auto_exec.get("tx") or "0xauto_" + hashlib.sha256(
+                        str(time.time()).encode()).hexdigest()[:58]
+
+                    st.session_state["tx_log"].append({
+                        "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                        "action": _auto_dec["action"],
+                        "asset": _auto_dec["asset"],
+                        "amount": f"${_auto_dec['amount_usd']:,.2f}",
+                        "confidence": f"{_auto_dec['confidence']:.0%}",
+                        "risk": f"{_auto_dec.get('risk_score', 5)}/10",
+                        "pnl": f"${_auto_pnl:+.2f}",
+                        "status": "🤖 Auto" + (" ✅" if _auto_exec.get("success") else " ⚠️"),
+                        "tx_hash": str(_auto_tx)[:20] + "…",
+                        "etherscan": f"https://sepolia.etherscan.io/tx/{_auto_tx}",
+                    })
+                    _cog("✓", f"Auto-trade executed: ${_auto_pnl:+.2f}", "ok" if _auto_pnl > 0 else "warn")
+            except Exception as _auto_err:
+                logger.warning("Autonomous cycle error: %s", _auto_err)
+                _cog("⚠", f"Auto-cycle error: {_auto_err}", "err")
+
+        st.session_state["_last_auto_run"] = _now_ts
+
+    import time as _time_mod
+    _time_mod.sleep(_auto_interval)
+    st.rerun()
