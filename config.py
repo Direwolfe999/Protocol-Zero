@@ -22,11 +22,63 @@ from dotenv import load_dotenv
 from exceptions import ConfigurationError
 
 # ── Load .env from project root ────────────────────────────
-_env_path = Path(__file__).resolve().parent / ".env"
-if not _env_path.exists():
-    print("⛔  .env file not found. Copy .env.example → .env and fill in your keys.")
+#   Priority: .env (production/Sepolia)  →  .env.local (Anvil fallback)
+#   The main .env is always loaded first.
+#   If the RPC is unreachable, config will automatically reload
+#   from .env.local (local Anvil) as a failsafe.
+_project_root = Path(__file__).resolve().parent
+_env_local = _project_root / ".env.local"
+_env_path  = _project_root / ".env"
+_active_env = "none"
+
+if _env_path.exists():
+    load_dotenv(_env_path, override=True)
+    _active_env = "production"
+    print("✅  Loaded .env (production / Sepolia mode)")
+elif _env_local.exists():
+    load_dotenv(_env_local, override=True)
+    _active_env = "local"
+    print("⚠️  No .env found — loaded .env.local (Anvil fallback)")
+else:
+    print("⛔  No .env or .env.local found. Copy .env.example → .env and fill in your keys.")
     sys.exit(1)
-load_dotenv(_env_path)
+
+
+def _try_anvil_fallback() -> bool:
+    """
+    If the production RPC is unreachable, automatically reload
+    config from .env.local (Anvil). Returns True if fallback activated.
+    """
+    global _active_env
+    if _active_env == "local":
+        return False           # already on Anvil
+    if not _env_local.exists():
+        return False           # no .env.local to fall back to
+
+    # Quick connectivity check — 4 second timeout
+    import subprocess
+    rpc = os.getenv("RPC_URL", "")
+    try:
+        result = subprocess.run(
+            ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+             "-m", "4", "-X", "POST", rpc,
+             "-H", "Content-Type: application/json",
+             "-d", '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.stdout.strip() == "200":
+            return False       # production RPC is reachable
+    except Exception:
+        pass                   # curl failed — activate fallback
+
+    print("⚠️  Sepolia RPC unreachable — activating Anvil fallback (.env.local)")
+    load_dotenv(_env_local, override=True)
+    _active_env = "local"
+    return True
+
+
+# Run the fallback check at import time
+_try_anvil_fallback()
 
 # Regex for a valid checksummed or lowercase Ethereum address
 _ETH_ADDRESS_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
@@ -102,7 +154,10 @@ AWS_READY              = bool(
 
 # ── Blockchain ──────────────────────────────────────────────
 RPC_URL     = _require("RPC_URL")
-CHAIN_ID    = int(os.getenv("CHAIN_ID", "11155111"))
+try:
+    CHAIN_ID = int(os.getenv("CHAIN_ID", "11155111"))
+except (ValueError, TypeError):
+    CHAIN_ID = 11155111
 PRIVATE_KEY = _require("PRIVATE_KEY")
 
 # ── ERC-8004 Contracts ──────────────────────────────────────
@@ -119,7 +174,10 @@ CAPITAL_VAULT_ADDRESS   = os.getenv("CAPITAL_VAULT_ADDRESS", "")
 MAX_TRADE_USD          = _require_positive_float("MAX_TRADE_USD", "500")
 MAX_DAILY_LOSS_USD     = _require_positive_float("MAX_DAILY_LOSS_USD", "1000")
 TRADING_PAIR           = os.getenv("TRADING_PAIR", "BTC/USDT")
-LOOP_INTERVAL_SECONDS  = max(1, int(os.getenv("LOOP_INTERVAL_SECONDS", "60")))
+try:
+    LOOP_INTERVAL_SECONDS = max(1, int(os.getenv("LOOP_INTERVAL_SECONDS", "60")))
+except (ValueError, TypeError):
+    LOOP_INTERVAL_SECONDS = 60
 TOTAL_CAPITAL_USD      = _require_positive_float("TOTAL_CAPITAL_USD", "10000")
 
 # ── DEX Execution (Uniswap V3 on Sepolia) ──────────────────
@@ -127,8 +185,14 @@ DEX_ENABLED            = os.getenv("DEX_ENABLED", "false").lower() == "true"
 UNISWAP_ROUTER_ADDRESS = os.getenv("UNISWAP_ROUTER_ADDRESS", "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E")
 WETH_ADDRESS           = os.getenv("WETH_ADDRESS", "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14")
 USDC_ADDRESS           = os.getenv("USDC_ADDRESS", "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238")
-DEX_MAX_SLIPPAGE_PCT   = float(os.getenv("DEX_MAX_SLIPPAGE_PCT", "1.0"))
-DEX_POOL_FEE           = int(os.getenv("DEX_POOL_FEE", "3000"))   # 3000 = 0.3%
+try:
+    DEX_MAX_SLIPPAGE_PCT = float(os.getenv("DEX_MAX_SLIPPAGE_PCT", "1.0"))
+except (ValueError, TypeError):
+    DEX_MAX_SLIPPAGE_PCT = 1.0
+try:
+    DEX_POOL_FEE = int(os.getenv("DEX_POOL_FEE", "3000"))
+except (ValueError, TypeError):
+    DEX_POOL_FEE = 3000   # 3000 = 0.3%
 
 # ── Agent Identity ──────────────────────────────────────────
 AGENT_NAME             = os.getenv("AGENT_NAME", "ProtocolZero")

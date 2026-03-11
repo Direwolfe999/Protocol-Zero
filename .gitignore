@@ -1,5 +1,14 @@
 # ── Secrets ────────────────────────────────
 .env
+.env.local
+
+# ── State files ───────────────────────────
+.nonce_state.json
+performance_history.json
+
+# ── Internal docs (not for submission) ────
+HACKATHON_IMPROVEMENT_PLAN.md
+gap analysis*
 
 # ── Virtual environments ──────────────────
 .venv/
