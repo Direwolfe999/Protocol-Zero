@@ -201,21 +201,27 @@ def tick(
         logger.warning("Reputation log failed (non-fatal): %s", exc)
 
     # 9 ── Record in performance tracker ──────────────────
-    performance.record_trade(
-        action=decision["action"],
-        asset=decision["asset"],
-        amount_usd=decision["amount_usd"],
-        pnl_usd=0.0,  # actual PnL resolved later
-        confidence=decision["confidence"],
-        risk_score=decision["risk_score"],
-        market_regime=decision["market_regime"],
-    )
+    try:
+        performance.record_trade(
+            action=decision["action"],
+            asset=decision["asset"],
+            amount_usd=decision["amount_usd"],
+            pnl_usd=0.0,  # actual PnL resolved later
+            confidence=decision["confidence"],
+            risk_score=decision["risk_score"],
+            market_regime=decision["market_regime"],
+        )
+    except Exception as exc:
+        logger.warning("Performance tracking failed (non-fatal): %s", exc)
 
     # 10 ── Update risk state ─────────────────────────────
-    risk_state.record_trade(
-        decision["asset"],
-        decision["amount_usd"],
-    )
+    try:
+        risk_state.record_trade(
+            decision["asset"],
+            decision["amount_usd"],
+        )
+    except Exception as exc:
+        logger.warning("Risk state update failed (non-fatal): %s", exc)
 
     return decision
 

@@ -387,8 +387,13 @@ class PerformanceTracker:
             self.max_drawdown_pct = data.get("max_drawdown_pct", 0.0)
             self._session_start = data.get("session_start", time.time())
             self.equity_curve = data.get("equity_curve", self.equity_curve)
+            valid_fields = {f.name for f in __import__('dataclasses').fields(TradeRecord)}
             for td in data.get("trades", []):
-                self.trades.append(TradeRecord(**td))
+                filtered = {k: v for k, v in td.items() if k in valid_fields}
+                try:
+                    self.trades.append(TradeRecord(**filtered))
+                except TypeError as exc:
+                    logger.warning("Skipping malformed trade record: %s", exc)
             logger.info("📂 Loaded %d trades from history", len(self.trades))
         except Exception as exc:
             logger.warning("Failed to load performance history: %s", exc)

@@ -30,6 +30,7 @@ from web3 import Web3
 from eth_account import Account
 
 import config
+from exceptions import DexExecutionError
 
 logger = logging.getLogger("protocol_zero.dex")
 
@@ -179,7 +180,7 @@ class DexExecutor:
         # ── Web3 connection ─────────────────────────────
         self.w3 = Web3(Web3.HTTPProvider(config.RPC_URL))
         if not self.w3.is_connected():
-            raise ConnectionError(f"Cannot connect to RPC: {config.RPC_URL}")
+            raise DexExecutionError(f"Cannot connect to RPC: {config.RPC_URL}")
 
         self.account = Account.from_key(config.PRIVATE_KEY)
         self.address = self.account.address
@@ -266,7 +267,7 @@ class DexExecutor:
         logger.info("📤  TX sent: %s", tx_hash.hex())
         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt["status"] != 1:
-            raise RuntimeError(f"TX reverted: {tx_hash.hex()}")
+            raise DexExecutionError(f"TX reverted: {tx_hash.hex()}")
         logger.info("✅  TX confirmed in block %d (gas used: %d)",
                      receipt["blockNumber"], receipt["gasUsed"])
         return receipt

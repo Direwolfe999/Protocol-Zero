@@ -34,6 +34,10 @@ from exceptions import ChainError, RegistryError, TransactionError
 
 logger = logging.getLogger("protocol_zero.chain")
 
+# ── Retry config ──────────────────────────────────────────
+MAX_TX_RETRIES: int = 3
+RETRY_BASE_DELAY: float = 2.0  # seconds — exponential backoff base
+
 # ════════════════════════════════════════════════════════════
 #  ERC-8004 Compliant ABIs for the Three Registries
 # ════════════════════════════════════════════════════════════
@@ -278,29 +282,60 @@ class ChainInteractor:
     def _send_tx(self, fn_call) -> str:
         """
         Build, sign, and broadcast a contract function call.
+        Retries with exponential backoff on transient failures.
         Returns the transaction hash hex string.
         """
-        nonce = self.w3.eth.get_transaction_count(self.address)
-        tx = fn_call.build_transaction({
-            "from": self.address,
-            "nonce": nonce,
-            "gas": 300_000,
-            "gasPrice": self.w3.eth.gas_price,
-            "chainId": config.CHAIN_ID,
-        })
-        signed = self.w3.eth.account.sign_transaction(tx, private_key=config.PRIVATE_KEY)
-        tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
-        logger.info("📤  TX sent: %s", tx_hash.hex())
+        last_error: Exception | None = None
 
-        # Wait for receipt (timeout 120 s)
-        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-        if receipt["status"] != 1:
-            raise TransactionError(
-                f"TX reverted: {tx_hash.hex()}",
-                details={"tx_hash": tx_hash.hex(), "block": receipt.get("blockNumber")},
-            )
-        logger.info("✅  TX confirmed in block %s", receipt["blockNumber"])
-        return tx_hash.hex()
+        for attempt in range(1, MAX_TX_RETRIES + 1):
+            try:
+                nonce = self.w3.eth.get_transaction_count(self.address)
+                gas_price = self.w3.eth.gas_price
+
+                # Estimate gas dynamically (proxy contracts need more than static 300k)
+                try:
+                    estimated = fn_call.estimate_gas({"from": self.address})
+                    gas_limit = int(estimated * 1.5) + 50_000  # 1.5× + 50k buffer
+                except Exception:
+                    gas_limit = 500_000  # safe fallback
+
+                tx = fn_call.build_transaction({
+                    "from": self.address,
+                    "nonce": nonce,
+                    "gas": gas_limit,
+                    "gasPrice": gas_price,
+                    "chainId": config.CHAIN_ID,
+                })
+                signed = self.w3.eth.account.sign_transaction(tx, private_key=config.PRIVATE_KEY)
+                tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
+                logger.info("📤  TX sent (attempt %d/%d): %s", attempt, MAX_TX_RETRIES, tx_hash.hex())
+
+                # Wait for receipt (timeout 120 s)
+                receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+                if receipt["status"] != 1:
+                    raise TransactionError(
+                        f"TX reverted: {tx_hash.hex()}",
+                        details={"tx_hash": tx_hash.hex(), "block": receipt.get("blockNumber")},
+                    )
+                logger.info("✅  TX confirmed in block %s", receipt["blockNumber"])
+                return tx_hash.hex()
+
+            except TransactionError:
+                raise  # Don't retry on-chain reverts — they'll revert again
+            except Exception as e:
+                last_error = e
+                delay = RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                logger.warning(
+                    "TX attempt %d/%d failed: %s — retrying in %.1fs",
+                    attempt, MAX_TX_RETRIES, e, delay,
+                )
+                if attempt < MAX_TX_RETRIES:
+                    time.sleep(delay)
+
+        raise TransactionError(
+            f"TX failed after {MAX_TX_RETRIES} attempts: {last_error}",
+            details={"last_error": str(last_error)},
+        )
 
     # ────────────────────────────────────────────────────────
     #  1.  Identity Registry — register / check agent (ERC-8004)
@@ -446,6 +481,8 @@ class ChainInteractor:
     #  3.  Validation Registry — ERC-8004 validationRequest/Response
     # ────────────────────────────────────────────────────────
 
+    _ZERO_ADDR = "0x" + "0" * 40
+
     def submit_validation_request(
         self,
         validator_address: str,
@@ -463,6 +500,9 @@ class ChainInteractor:
         request_uri      : URI pointing to the validation artifact
         request_hash     : bytes32 hash of the request content
         """
+        if config.VALIDATION_REGISTRY_ADDRESS == self._ZERO_ADDR:
+            logger.info("📋  Validation Registry not deployed — recording locally.")
+            return "0x" + Web3.keccak(text=request_uri).hex()
         logger.info("📋  Submitting validation request to %s …", validator_address[:10])
         fn = self.validation.functions.validationRequest(
             Web3.to_checksum_address(validator_address),
@@ -474,10 +514,14 @@ class ChainInteractor:
 
     def get_validation_status(self, request_id: bytes) -> int:
         """Check the status of a validation request."""
+        if config.VALIDATION_REGISTRY_ADDRESS == self._ZERO_ADDR:
+            return 0
         return self.validation.functions.getValidationStatus(request_id).call()
 
     def get_validation_summary(self) -> dict:
         """Get validation summary for this agent."""
+        if config.VALIDATION_REGISTRY_ADDRESS == self._ZERO_ADDR:
+            return {"total_requests": 0, "approved": 0, "rejected": 0}
         agent_id = self.get_token_id()
         try:
             total, approved, rejected = (
@@ -524,6 +568,12 @@ class ChainInteractor:
                 {"name": "timestamp",  "type": "uint256"},
                 {"name": "agent",      "type": "address"},
             ],
+            "EIP712Domain": [
+                {"name": "name",              "type": "string"},
+                {"name": "version",           "type": "string"},
+                {"name": "chainId",           "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
         }
 
         message_data = {
@@ -537,10 +587,12 @@ class ChainInteractor:
         }
 
         signable = encode_typed_data(
-            domain_data,
-            message_types,
-            "TradeIntent",
-            message_data,
+            full_message={
+                "types":       message_types,
+                "primaryType": "TradeIntent",
+                "domain":      domain_data,
+                "message":     message_data,
+            }
         )
 
         signed = self.account.sign_message(signable)
@@ -560,8 +612,16 @@ class ChainInteractor:
     def submit_intent(self, decision: dict) -> str:
         """
         Sign a trade intent and submit it via validationRequest().
+        If the Validation Registry is not deployed (zero address),
+        the intent is signed locally and a deterministic hash returned.
         """
         signature, intent_hash = self.sign_trade_intent(decision)
+
+        # Graceful fallback when no Validation Registry is deployed
+        if config.VALIDATION_REGISTRY_ADDRESS == self._ZERO_ADDR:
+            logger.info("📋  Validation Registry not deployed — intent signed locally.")
+            request_uri = json.dumps(decision, default=str)
+            return "0x" + Web3.keccak(text=request_uri).hex()
 
         agent_id = self.get_token_id()
         request_uri = json.dumps(decision, default=str)

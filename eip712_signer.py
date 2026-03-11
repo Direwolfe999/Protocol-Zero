@@ -46,9 +46,13 @@ Usage
 
 from __future__ import annotations
 
+import binascii
+import json as _json
 import logging
+import os
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from eth_account import Account
@@ -121,13 +125,35 @@ PRIMARY_TYPE: str = "TradeIntent"
 @dataclass
 class _NonceTracker:
     """
-    Simple monotonic nonce to prevent replay attacks.
-    In production, persist to disk or read from the contract.
+    Monotonic nonce persisted to a JSON file to survive restarts.
+    Prevents replay attacks across process lifecycles.
     """
     _current: int = 0
+    _path: Path = field(default_factory=lambda: Path(__file__).parent / ".nonce_state.json")
+
+    def __post_init__(self) -> None:
+        self._load()
+
+    def _load(self) -> None:
+        """Load last-used nonce from disk."""
+        try:
+            if self._path.exists():
+                data = _json.loads(self._path.read_text())
+                self._current = int(data.get("nonce", 0))
+                logger.debug("Loaded nonce %d from %s", self._current, self._path)
+        except Exception as e:
+            logger.warning("Could not load nonce file: %s — starting from 0", e)
+
+    def _save(self) -> None:
+        """Persist current nonce to disk."""
+        try:
+            self._path.write_text(_json.dumps({"nonce": self._current}))
+        except Exception as e:
+            logger.warning("Could not save nonce file: %s", e)
 
     def next(self) -> int:
         self._current += 1
+        self._save()
         return self._current
 
     @property
@@ -176,7 +202,13 @@ def build_intent_message(
     amount = float(order_details.get("amount", 0))
 
     # Derive the agent address from the loaded private key
-    account = Account.from_key(config.PRIVATE_KEY)
+    try:
+        account = Account.from_key(config.PRIVATE_KEY)
+    except (ValueError, binascii.Error) as exc:
+        from exceptions import SigningError
+        raise SigningError(
+            f"Invalid PRIVATE_KEY — cannot derive agent address: {exc}"
+        ) from exc
 
     message: dict[str, Any] = {
         "action":     direction,
@@ -212,16 +244,33 @@ def sign_intent(message: dict[str, Any]) -> dict[str, Any]:
     domain = get_domain()
 
     # ── Encode the typed data for signing ─────────────────
-    #    encode_typed_data(domain, types, primaryType, message)
+    #    encode_typed_data(domain_data, message_types, message_data)
+    #    The primaryType is inferred automatically by eth-account.
+    full_types = dict(TRADE_INTENT_TYPES)
+    full_types["EIP712Domain"] = [
+        {"name": "name",              "type": "string"},
+        {"name": "version",           "type": "string"},
+        {"name": "chainId",           "type": "uint256"},
+        {"name": "verifyingContract", "type": "address"},
+    ]
+
     signable = encode_typed_data(
-        domain,
-        TRADE_INTENT_TYPES,
-        PRIMARY_TYPE,
-        message,
+        full_message={
+            "types":       full_types,
+            "primaryType": PRIMARY_TYPE,
+            "domain":      domain,
+            "message":     message,
+        }
     )
 
     # ── Sign with the agent's private key ─────────────────
-    account = Account.from_key(config.PRIVATE_KEY)
+    try:
+        account = Account.from_key(config.PRIVATE_KEY)
+    except (ValueError, binascii.Error) as exc:
+        from exceptions import SigningError
+        raise SigningError(
+            f"Invalid PRIVATE_KEY — cannot sign intent: {exc}"
+        ) from exc
     signed  = account.sign_message(signable)
 
     result = {
@@ -287,11 +336,21 @@ def recover_signer(
     """
     domain = get_domain()
 
+    full_types = dict(TRADE_INTENT_TYPES)
+    full_types["EIP712Domain"] = [
+        {"name": "name",              "type": "string"},
+        {"name": "version",           "type": "string"},
+        {"name": "chainId",           "type": "uint256"},
+        {"name": "verifyingContract", "type": "address"},
+    ]
+
     signable = encode_typed_data(
-        domain,
-        TRADE_INTENT_TYPES,
-        PRIMARY_TYPE,
-        message,
+        full_message={
+            "types":       full_types,
+            "primaryType": PRIMARY_TYPE,
+            "domain":      domain,
+            "message":     message,
+        }
     )
 
     recovered = Account.recover_message(signable, signature=signature)

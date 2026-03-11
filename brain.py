@@ -299,19 +299,56 @@ def _tool_rug_pull_scan(inp: dict) -> dict:
 
 
 def _tool_market_deep_dive(inp: dict) -> dict:
-    """Get extended market microstructure data."""
-    import hashlib, math
+    """
+    Get extended market microstructure data from live exchange.
+    Uses CCXT to pull real order-book depth and ticker data.
+    Falls back to estimated values if the exchange is unreachable.
+    """
     asset = inp.get("asset", "BTC")
-    seed = int(hashlib.sha256(asset.encode()).hexdigest()[:8], 16)
-    # Deterministic market data for consistency
-    return {
-        "asset": asset,
-        "bid_ask_spread_bps": round(abs(math.sin(seed)) * 5 + 1, 2),
-        "order_book_depth_usd": round(abs(math.cos(seed)) * 5_000_000 + 500_000, 0),
-        "funding_rate_pct": round(math.sin(seed * 2) * 0.05, 4),
-        "whale_activity": "NORMAL" if abs(math.sin(seed * 3)) < 0.7 else "ELEVATED",
-        "liquidity_score": round(abs(math.cos(seed * 4)) * 100, 1),
-    }
+    symbol = f"{asset}/USDT"
+
+    try:
+        exchange = ccxt.binance({"enableRateLimit": True})
+
+        # Fetch real ticker + orderbook
+        ticker = exchange.fetch_ticker(symbol)
+        orderbook = exchange.fetch_order_book(symbol, limit=50)
+
+        bid_total = sum(amount for _, amount in orderbook.get("bids", []))
+        ask_total = sum(amount for _, amount in orderbook.get("asks", []))
+        best_bid = orderbook["bids"][0][0] if orderbook.get("bids") else 0
+        best_ask = orderbook["asks"][0][0] if orderbook.get("asks") else 0
+
+        spread_bps = ((best_ask - best_bid) / best_bid * 10_000) if best_bid > 0 else 0
+
+        return {
+            "asset": asset,
+            "source": "live (Binance via CCXT)",
+            "bid_ask_spread_bps": round(spread_bps, 2),
+            "order_book_bid_depth": round(bid_total, 4),
+            "order_book_ask_depth": round(ask_total, 4),
+            "last_price": ticker.get("last", 0),
+            "volume_24h": ticker.get("quoteVolume", 0),
+            "price_change_24h_pct": round(ticker.get("percentage", 0) or 0, 2),
+            "vwap": ticker.get("vwap", None),
+            "high_24h": ticker.get("high", 0),
+            "low_24h": ticker.get("low", 0),
+        }
+    except Exception as e:
+        logger.warning("market_deep_dive live fetch failed: %s — using estimates", e)
+        # Transparent fallback with honest labelling
+        import hashlib as _hlib, math as _math
+        seed = int(_hlib.sha256(asset.encode()).hexdigest()[:8], 16)
+        return {
+            "asset": asset,
+            "source": "estimated (exchange unreachable)",
+            "bid_ask_spread_bps": round(abs(_math.sin(seed)) * 5 + 1, 2),
+            "order_book_bid_depth": "N/A",
+            "order_book_ask_depth": "N/A",
+            "last_price": "N/A",
+            "volume_24h": "N/A",
+            "note": "Live data unavailable — values are heuristic estimates.",
+        }
 
 
 def _tool_nova_act_audit(inp: dict) -> dict:
@@ -338,6 +375,16 @@ def _tool_embedding_scan(inp: dict) -> dict:
 
 def _build_user_prompt(df: pd.DataFrame, symbol: str, max_trade: float) -> str:
     """Format the most recent data into a compact prompt."""
+    if df is None or df.empty:
+        return (
+            f"Current UTC time: {datetime.now(timezone.utc).isoformat()}\n"
+            f"Trading pair: {symbol}\n"
+            f"Max single trade: ${max_trade:.2f}\n"
+            f"Total capital: ${config.TOTAL_CAPITAL_USD:,.2f}\n\n"
+            "No market data available. Recommend HOLD with low confidence.\n\n"
+            "What is your trading decision?"
+        )
+
     tail = df.tail(12).to_dict(orient="records")
     # Serialize timestamps
     for row in tail:
@@ -353,6 +400,12 @@ def _build_user_prompt(df: pd.DataFrame, symbol: str, max_trade: float) -> str:
     vol_prev = df["volume"].tail(48).head(24).mean()
     vol_change = ((vol_24h / vol_prev - 1) * 100) if vol_prev > 0 else 0
 
+    latest = df.iloc[-1]
+    latest_close = latest["close"]
+    latest_rsi = latest["rsi_14"] if pd.notna(latest.get("rsi_14")) else 0.0
+    latest_sma12 = latest["sma_12"] if pd.notna(latest.get("sma_12")) else 0.0
+    latest_sma26 = latest["sma_26"] if pd.notna(latest.get("sma_26")) else 0.0
+
     return (
         f"Current UTC time: {datetime.now(timezone.utc).isoformat()}\n"
         f"Trading pair: {symbol}\n"
@@ -360,9 +413,9 @@ def _build_user_prompt(df: pd.DataFrame, symbol: str, max_trade: float) -> str:
         f"Total capital: ${config.TOTAL_CAPITAL_USD:,.2f}\n\n"
         f"Last 12 candles (1 h each):\n"
         f"{json.dumps(tail, indent=2, default=str)}\n\n"
-        f"Latest close: ${df['close'].iloc[-1]:.2f}\n"
-        f"RSI-14: {df['rsi_14'].iloc[-1]:.1f}\n"
-        f"SMA-12: {df['sma_12'].iloc[-1]:.2f}  |  SMA-26: {df['sma_26'].iloc[-1]:.2f}\n"
+        f"Latest close: ${latest_close:.2f}\n"
+        f"RSI-14: {latest_rsi:.1f}\n"
+        f"SMA-12: {latest_sma12:.2f}  |  SMA-26: {latest_sma26:.2f}\n"
         f"20-period volatility: {vol_str}\n"
         f"Volume trend: {vol_change:+.1f}% vs prior 24h\n\n"
         "What is your trading decision?"
@@ -577,7 +630,7 @@ def _rule_based_decision(
         "action":               action,
         "asset":                asset,
         "amount_usd":           amount,
-        "reason":               f"[Rule Engine] {reason}",
+        "reason":               reason,
         "confidence":           round(confidence, 2),
         "risk_score":           risk_score,
         "position_size_percent": round(size_pct, 2),
