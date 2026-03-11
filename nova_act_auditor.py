@@ -240,30 +240,39 @@ class NovaActAuditor:
                          result: AuditResult) -> AuditResult:
         """
         Simulated audit using deterministic heuristics.
-        Used when Nova Act API key is not available.
-        Produces realistic results for demo / hackathon judging.
+        Used when Nova Act SDK is not available (invite-only).
+
+        Applies realistic, address-entropy-based heuristics.
+        Known infrastructure contracts (registries, DEX routers, wrapped
+        tokens) are identified as high-confidence verified contracts — this
+        is factually accurate because they ARE verified on-chain.
         """
         result.audit_method = "simulated"
 
         # Deterministic simulation based on address hash
         addr_hash = int(hashlib.sha256(contract_address.lower().encode()).hexdigest()[:8], 16)
 
-        # Known hackathon contracts are always safe
-        known_safe = {
-            config.IDENTITY_REGISTRY_ADDRESS.lower(),
-            config.REPUTATION_REGISTRY_ADDRESS.lower(),
-            config.UNISWAP_ROUTER_ADDRESS.lower(),
-            config.WETH_ADDRESS.lower(),
-            config.USDC_ADDRESS.lower(),
+        # Infrastructure contracts that are genuinely verified on-chain
+        known_infra = {
+            config.IDENTITY_REGISTRY_ADDRESS.lower(): "ERC-8004 Identity Registry",
+            config.REPUTATION_REGISTRY_ADDRESS.lower(): "ERC-8004 Reputation Registry",
+            config.UNISWAP_ROUTER_ADDRESS.lower(): "Uniswap V3 Router",
+            config.WETH_ADDRESS.lower(): "Wrapped ETH (WETH)",
+            config.USDC_ADDRESS.lower(): "USD Coin (USDC)",
         }
 
-        if contract_address.lower() in known_safe:
+        infra_label = known_infra.get(contract_address.lower())
+        if infra_label:
+            # These are genuinely verified infrastructure contracts
             result.contract_verified = True
             result.source_code_available = True
-            result.liquidity_locked = True
-            result.liquidity_amount_usd = 500_000 + (addr_hash % 2_000_000)
-            result.lock_duration_days = 180 + (addr_hash % 365)
-            result.dex_verified_badge = True
+            result.liquidity_locked = None  # Unknown without live check
+            result.liquidity_amount_usd = 0.0  # Unknown — not faked
+            result.lock_duration_days = 0
+            result.dex_verified_badge = False  # Unknown without live check
+            result.social_flags.append(
+                f"ℹ️ Recognized infrastructure: {infra_label} (simulated audit)"
+            )
         else:
             # Variable risk based on address entropy
             risk_seed = addr_hash % 100
