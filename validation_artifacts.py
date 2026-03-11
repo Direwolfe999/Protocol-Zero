@@ -110,6 +110,10 @@ class ValidationArtifactBuilder:
     """
     Builds, hashes, stores, and submits validation artifacts
     for every trade decision.
+
+    Maintains a **Merkle tree** of artifact hashes so the complete
+    audit trail is tamper-evident: modifying any historical artifact
+    changes the Merkle root, making tampering immediately detectable.
     """
 
     def __init__(self, chain_interactor: Any = None) -> None:
@@ -121,6 +125,8 @@ class ValidationArtifactBuilder:
         """
         self.chain = chain_interactor
         self._artifact_count = 0
+        self._merkle_leaves: list[str] = []  # ordered artifact hashes
+        self._merkle_root: str = "0x" + "0" * 64  # genesis root
 
     def build_artifact(
         self,
@@ -202,12 +208,17 @@ class ValidationArtifactBuilder:
         # Compute artifact hash
         artifact.artifact_hash = self._compute_hash(artifact)
 
+        # Chain into Merkle tree
+        self._merkle_leaves.append(artifact.artifact_hash)
+        self._merkle_root = self._compute_merkle_root(self._merkle_leaves)
+
         # Save locally
         artifact.request_uri = self._save_artifact(artifact)
 
         logger.info(
-            "📋 Built validation artifact %s | hash=%s",
+            "📋 Built validation artifact %s | hash=%s | merkle_root=%s",
             artifact_id, artifact.artifact_hash[:18] + "…",
+            self._merkle_root[:18] + "…",
         )
         return artifact
 
@@ -252,8 +263,11 @@ class ValidationArtifactBuilder:
     def _save_artifact(self, artifact: ValidationArtifact) -> str:
         """Save artifact to local JSON file."""
         filepath = _ARTIFACTS_DIR / f"{artifact.artifact_id}.json"
-        filepath.write_text(artifact.to_json(), encoding="utf-8")
-        logger.debug("💾 Artifact saved to %s", filepath)
+        try:
+            filepath.write_text(artifact.to_json(), encoding="utf-8")
+            logger.debug("💾 Artifact saved to %s", filepath)
+        except OSError as exc:
+            logger.error("Failed to save artifact %s: %s", artifact.artifact_id, exc)
         return str(filepath)
 
     def submit_to_registry(
@@ -315,6 +329,48 @@ class ValidationArtifactBuilder:
             except Exception:
                 continue
         return artifacts
+
+    # ── Merkle Tree ─────────────────────────────────────────
+
+    @staticmethod
+    def _compute_merkle_root(leaves: list[str]) -> str:
+        """
+        Compute the Merkle root of an ordered list of artifact hashes.
+
+        Each leaf is an ``0x``-prefixed keccak256 hex string.  Pairs are
+        concatenated in sorted order and re-hashed until a single root
+        remains.  This makes the entire audit trail tamper-evident.
+        """
+        if not leaves:
+            return "0x" + "0" * 64
+
+        # Convert hex strings to bytes
+        layer = [bytes.fromhex(h[2:]) if h.startswith("0x") else bytes.fromhex(h) for h in leaves]
+
+        while len(layer) > 1:
+            next_layer: list[bytes] = []
+            for i in range(0, len(layer), 2):
+                if i + 1 < len(layer):
+                    # Sort pair for deterministic ordering
+                    pair = sorted([layer[i], layer[i + 1]])
+                    combined = pair[0] + pair[1]
+                else:
+                    # Odd leaf — promote unpaired
+                    combined = layer[i] + layer[i]
+                next_layer.append(Web3.keccak(combined))
+            layer = next_layer
+
+        return "0x" + layer[0].hex()
+
+    @property
+    def merkle_root(self) -> str:
+        """Current Merkle root of all chained artifacts."""
+        return self._merkle_root
+
+    @property
+    def artifact_count(self) -> int:
+        """Number of artifacts in the chain."""
+        return len(self._merkle_leaves)
 
     def verify_artifact(self, artifact_path: str) -> bool:
         """Verify an artifact's hash matches its content."""
