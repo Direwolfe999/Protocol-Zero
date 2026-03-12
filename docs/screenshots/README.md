@@ -1,12 +1,10 @@
-# Screenshots Placeholder
-Add dashboard screenshots here before submission.
 
 Required screenshots:
-- `dashboard.png` — Full dashboard overview
-- `cognitive-stream.png` — AI reasoning cognitive stream
-- `trade-dna.png` — Trade DNA helix visualization
-- `risk-heatmap.png` — 6-layer risk heatmap
+- `overview.png` — Full dashboard overview
+- `intro2.png` — AI reasoning cognitive stream
+- `ai brain analysis.png` — AI Brain analysis Chart stream
+- `risk & exec.png` — Risk and Execution visualization
+- `trust panel.png` — Trust panel Outline
 - `xai-panel.png` — XAI explainability panel
-- `voice.png` — Voice interface panel
+- `Voice AI.png` — Voice interface panel
 
-To capture: run `streamlit run dashboard.py` and use browser screenshots.
