@@ -461,7 +461,10 @@ class NovaSonicVoice:
             "rug_pull_alert": f"Critical alert: Potential rug-pull detected on "
                               f"{details.get('token', 'unknown')}. Trading halted for this asset.",
         }
-        return alerts.get(alert_type, f"System alert: {alert_type}")
+        return alerts.get(alert_type,
+            f"⚠️ {details.get('severity', alert_type).upper()} ALERT: "
+            f"{details.get('message', alert_type)}. Protocol Zero monitoring engaged."
+        )
 
     def _build_risk_brief(self, portfolio: dict) -> str:
         positions = portfolio.get("positions", 0)

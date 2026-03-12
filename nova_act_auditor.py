@@ -22,10 +22,15 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import time
+import concurrent.futures
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from typing import Any
+
+# Maximum seconds before live audit is killed and simulated fallback kicks in
+_LIVE_AUDIT_TIMEOUT = 5
 
 import config
 
@@ -93,6 +98,8 @@ class NovaActAuditor:
         self._NovaAct = None
 
         if self.enabled and self.api_key:
+            # Skip Playwright browser install attempt — we use simulated fallback
+            os.environ.setdefault("NOVA_ACT_SKIP_PLAYWRIGHT_INSTALL", "1")
             try:
                 from nova_act import NovaAct
                 self._NovaAct = NovaAct
@@ -102,6 +109,9 @@ class NovaActAuditor:
                 logger.warning("nova-act package not installed — using simulated audits")
         else:
             logger.info("Nova Act: API key not set — using simulated audits")
+
+        # Track whether live audits have failed (skip retries)
+        self._live_failed = False
 
     # ── Public API ──────────────────────────────────────────
 
@@ -121,12 +131,20 @@ class NovaActAuditor:
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
 
-        if self._nova_act_available:
+        if self._nova_act_available and not self._live_failed:
             try:
-                result = self._live_audit(contract_address, chain, result)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(self._live_audit, contract_address, chain, result)
+                    result = future.result(timeout=_LIVE_AUDIT_TIMEOUT)
+            except concurrent.futures.TimeoutError:
+                logger.warning("Nova Act live audit timed out after %ds — using simulated", _LIVE_AUDIT_TIMEOUT)
+                result.error = f"Live audit timed out after {_LIVE_AUDIT_TIMEOUT}s"
+                self._live_failed = True  # Don't retry — go straight to simulated next time
+                result = self._simulated_audit(contract_address, chain, result)
             except Exception as e:
                 logger.error("Nova Act audit failed: %s", e)
                 result.error = str(e)
+                self._live_failed = True
                 result = self._simulated_audit(contract_address, chain, result)
         else:
             result = self._simulated_audit(contract_address, chain, result)
@@ -135,10 +153,14 @@ class NovaActAuditor:
         result.risk_level, result.risk_score = self._compute_risk(result)
         return result
 
-    def audit_token(self, token_symbol: str, token_address: str = "",
+    def audit_token(self, token_symbol_or_address: str, token_address: str = "",
                     chain: str = "sepolia") -> AuditResult:
-        """Convenience: audit by token symbol, resolving address if needed."""
-        address = token_address or self._resolve_token_address(token_symbol)
+        """Convenience: audit by token symbol or address."""
+        # If the first arg looks like an address, use it directly
+        if token_symbol_or_address.startswith("0x") and len(token_symbol_or_address) >= 42:
+            address = token_symbol_or_address
+        else:
+            address = token_address or self._resolve_token_address(token_symbol_or_address)
         return self.audit_contract(address, chain)
 
     def quick_safety_check(self, contract_address: str) -> dict:

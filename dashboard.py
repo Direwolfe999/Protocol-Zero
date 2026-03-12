@@ -39,38 +39,59 @@ import streamlit as st
 import os, glob, pathlib
 
 # ── Real Protocol Zero Modules (graceful fallback) ─────
+# Use @st.cache_resource so heavy constructors only run ONCE across reruns.
+
 try:
     import config
-    from chain_interactor import ChainInteractor
-    _CHAIN = ChainInteractor()
-    _HAS_CHAIN = True
 except Exception:
-    _HAS_CHAIN = False
-    _CHAIN = None
+    config = None  # type: ignore[assignment]
 
-try:
-    from performance_tracker import PerformanceTracker
-    _PERF = PerformanceTracker(initial_capital=10_000.0)
-    _HAS_PERF = True
-except Exception:
-    _HAS_PERF = False
-    _PERF = None
+@st.cache_resource(show_spinner=False)
+def _init_chain():
+    try:
+        from chain_interactor import ChainInteractor
+        c = ChainInteractor()
+        return c, True
+    except Exception:
+        return None, False
 
-try:
-    from validation_artifacts import ValidationArtifactBuilder
-    _ARTIFACTS = ValidationArtifactBuilder()
-    _HAS_ARTIFACTS = True
-except Exception:
-    _HAS_ARTIFACTS = False
-    _ARTIFACTS = None
+_CHAIN, _HAS_CHAIN = _init_chain()
 
+@st.cache_resource(show_spinner=False)
+def _init_perf():
+    try:
+        from performance_tracker import PerformanceTracker
+        return PerformanceTracker(initial_capital=10_000.0), True
+    except Exception:
+        return None, False
+
+_PERF, _HAS_PERF = _init_perf()
+
+@st.cache_resource(show_spinner=False)
+def _init_artifacts():
+    try:
+        from validation_artifacts import ValidationArtifactBuilder
+        return ValidationArtifactBuilder(), True
+    except Exception:
+        return None, False
+
+_ARTIFACTS, _HAS_ARTIFACTS = _init_artifacts()
+
+@st.cache_resource(show_spinner=False)
+def _init_risk():
+    try:
+        from risk_check import RiskState, run_all_checks, format_risk_report
+        return RiskState(max_position_usd=500.0, max_daily_loss_usd=1000.0), True
+    except Exception:
+        return None, False
+
+_RISK_STATE, _HAS_RISK = _init_risk()
+
+# Import risk functions separately (they aren't heavy, just need the module)
 try:
     from risk_check import RiskState, run_all_checks, format_risk_report
-    _RISK_STATE = RiskState(max_position_usd=500.0, max_daily_loss_usd=1000.0)
-    _HAS_RISK = True
 except Exception:
-    _HAS_RISK = False
-    _RISK_STATE = None
+    pass
 
 try:
     from sign_trade import validate_and_sign
@@ -78,37 +99,46 @@ try:
 except Exception:
     _HAS_SIGN = False
 
-try:
-    from dex_executor import DexExecutor
-    _DEX = DexExecutor()
-    _HAS_DEX = True
-except Exception:
-    _HAS_DEX = False
-    _DEX = None
+@st.cache_resource(show_spinner=False)
+def _init_dex():
+    try:
+        from dex_executor import DexExecutor
+        d = DexExecutor()
+        return d, True
+    except Exception:
+        return None, False
 
-try:
-    from nova_act_auditor import NovaActAuditor
-    _NOVA_ACT = NovaActAuditor()
-    _HAS_NOVA_ACT = True
-except Exception:
-    _HAS_NOVA_ACT = False
-    _NOVA_ACT = None
+_DEX, _HAS_DEX = _init_dex()
 
-try:
-    from nova_sonic_voice import NovaSonicVoice
-    _NOVA_SONIC = NovaSonicVoice()
-    _HAS_NOVA_SONIC = True
-except Exception:
-    _HAS_NOVA_SONIC = False
-    _NOVA_SONIC = None
+@st.cache_resource(show_spinner=False)
+def _init_nova_act():
+    try:
+        from nova_act_auditor import NovaActAuditor
+        return NovaActAuditor(), True
+    except Exception:
+        return None, False
 
-try:
-    from nova_embeddings import NovaEmbeddingsAnalyzer
-    _NOVA_EMBED = NovaEmbeddingsAnalyzer()
-    _HAS_NOVA_EMBED = True
-except Exception:
-    _HAS_NOVA_EMBED = False
-    _NOVA_EMBED = None
+_NOVA_ACT, _HAS_NOVA_ACT = _init_nova_act()
+
+@st.cache_resource(show_spinner=False)
+def _init_nova_sonic():
+    try:
+        from nova_sonic_voice import NovaSonicVoice
+        return NovaSonicVoice(), True
+    except Exception:
+        return None, False
+
+_NOVA_SONIC, _HAS_NOVA_SONIC = _init_nova_sonic()
+
+@st.cache_resource(show_spinner=False)
+def _init_nova_embed():
+    try:
+        from nova_embeddings import NovaEmbeddingsAnalyzer
+        return NovaEmbeddingsAnalyzer(), True
+    except Exception:
+        return None, False
+
+_NOVA_EMBED, _HAS_NOVA_EMBED = _init_nova_embed()
 
 
 # ════════════════════════════════════════════════════════════
@@ -127,12 +157,14 @@ st.set_page_config(
 # ════════════════════════════════════════════════════════════
 
 # Viewport meta for proper mobile rendering
-st.markdown('<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">',
+st.markdown('<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">'
+            '<link rel="preconnect" href="https://fonts.googleapis.com">'
+            '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+            '<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">',
             unsafe_allow_html=True)
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
     --bg-primary:    #060612;
@@ -718,7 +750,7 @@ section.main, section.main *,
     position: fixed;
     inset: 0;                           /* covers entire viewport */
     z-index: 999998;
-    background: rgba(6, 6, 18, 0.5);
+    background: rgba(6, 6, 18, 0.18);
     opacity: 0;
     animation: pzShow .15s ease .35s forwards;
     pointer-events: none;
@@ -767,14 +799,29 @@ else:
     except Exception:
         pass
 
+
+def _qp_get(name: str, default: str = "") -> str:
+    """Read a query param safely (works for str or list-like values)."""
+    try:
+        val = st.query_params.get(name, default)
+        if isinstance(val, list):
+            return str(val[0]) if val else default
+        return str(val)
+    except Exception:
+        return default
+
+
+_AUTO_QP = _qp_get("auto", "0").strip().lower() in {"1", "true", "yes", "on"}
+_PAIR_QP = _qp_get("pair", "ETH/USDT").strip().upper() or "ETH/USDT"
+
 _DEFAULTS: dict[str, Any] = {
     "agent_name":       "ProtocolZero",
     "agent_wallet":     _AGENT_WALLET,
     "reputation_score": 95,
     "agent_registered": False,
-    "autonomous_mode":  False,
+    "autonomous_mode":  _AUTO_QP,
 
-    "selected_pair":    "ETH/USDT",
+    "selected_pair":    _PAIR_QP,
     "market_df":        None,
     "market_regime":    "RANGING",
 
@@ -798,6 +845,11 @@ _DEFAULTS: dict[str, Any] = {
     "rsi_halt_high":      80,
     "rsi_halt_low":       20,
     "pnl_history":        [],
+
+    # AWS cost guard
+    "_api_calls_today":   0,
+    "_api_calls_date":    "",
+    "_api_cost_estimate": 0.0,
     "total_spent":        0.0,
 
     # ── ERC-8004 Trust Panel ────────────────────────────
@@ -832,11 +884,415 @@ _DEFAULTS: dict[str, Any] = {
     "nova_act_results":    [],   # history of audit results
     "nova_voice_history":  [],   # history of voice commands / responses
     "nova_embed_results":  [],   # history of embedding analyses
+
+    # ── Intro / Onboarding ────────────────────────────
+    "intro_completed":     "intro" in st.query_params and st.query_params["intro"] == "done",
+    "intro_slide":         0,
 }
 
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
+
+# Keep URL in sync so a hard refresh keeps key session flags.
+try:
+    _qp_auto_now = _qp_get("auto", "")
+    _qp_pair_now = _qp_get("pair", "")
+    _target_auto = "1" if st.session_state.get("autonomous_mode") else "0"
+    _target_pair = str(st.session_state.get("selected_pair", "ETH/USDT"))
+    if _qp_auto_now != _target_auto:
+        st.query_params["auto"] = _target_auto
+    if _qp_pair_now != _target_pair:
+        st.query_params["pair"] = _target_pair
+except Exception:
+    pass
+
+# ── Cap unbounded session lists to prevent memory bloat ────
+_LIST_CAPS = {
+    "decision_history": 200,
+    "tx_log": 200,
+    "calibration_data": 200,
+    "nova_act_results": 50,
+    "nova_voice_history": 50,
+    "nova_embed_results": 50,
+    "equity_curve": 500,
+    "pnl_history": 500,
+}
+for _cap_key, _cap_max in _LIST_CAPS.items():
+    _lst = st.session_state.get(_cap_key)
+    if isinstance(_lst, list) and len(_lst) > _cap_max:
+        st.session_state[_cap_key] = _lst[-_cap_max:]
+
+
+# ── Persist key state across hard browser reloads ─────────
+_SESSION_FILE = pathlib.Path("artifacts") / "session_state.json"
+_PERSIST_KEYS = [
+    "agent_registered",
+    "autonomous_mode",
+    "selected_pair",
+    "latest_decision",
+    "decision_history",
+    "tx_log",
+    "session_pnl",
+    "trade_count",
+    "market_regime",
+    "whatif_vol_mult",
+    "last_reg_tx",
+    "reputation_score",
+    "on_chain_rep_count",
+    "_api_calls_today",
+    "_api_calls_date",
+    "_api_cost_estimate",
+    "_last_auto_run",
+    "_prev_auto_decision",
+]
+
+
+def _restore_persisted_state() -> None:
+    if not _SESSION_FILE.exists():
+        return
+    try:
+        raw = json.loads(_SESSION_FILE.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            return
+        for k in _PERSIST_KEYS:
+            if k in raw:
+                st.session_state[k] = raw[k]
+    except Exception as _e:
+        logger.debug("Session restore skipped: %s", _e)
+
+
+def _persist_state() -> None:
+    try:
+        _SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+        payload = {k: st.session_state.get(k) for k in _PERSIST_KEYS}
+        _SESSION_FILE.write_text(json.dumps(payload, ensure_ascii=False, default=str),
+                                 encoding="utf-8")
+    except Exception as _e:
+        logger.debug("Session persist skipped: %s", _e)
+
+
+if not st.session_state.get("_persist_restored", False):
+    _restore_persisted_state()
+    st.session_state["_persist_restored"] = True
+    try:
+        st.query_params["auto"] = "1" if st.session_state.get("autonomous_mode") else "0"
+        st.query_params["pair"] = str(st.session_state.get("selected_pair", "ETH/USDT"))
+    except Exception:
+        pass
+
+
+# ════════════════════════════════════════════════════════════
+#  🎬 FIRST-TIME ONBOARDING — Cinematic Intro Walkthrough
+# ════════════════════════════════════════════════════════════
+
+_INTRO_SLIDES = [
+    {
+        "icon": "🛡️",
+        "title": "Welcome to Protocol Zero",
+        "subtitle": "Autonomous · Trust-Minimized · On-Chain Accountable",
+        "body": (
+            "Protocol Zero is an AI-powered DeFi trading agent that combines "
+            "Amazon Nova intelligence with cryptographic accountability. "
+            "Every decision is signed, risk-gated, and logged on-chain."
+        ),
+        "features": [],
+        "gradient": "linear-gradient(135deg, #0a0a2e 0%, #1a0a3e 50%, #0a1a3e 100%)",
+    },
+    {
+        "icon": "🧠",
+        "title": "AI Reasoning Engine",
+        "subtitle": "Amazon Nova Lite · Agentic Tool-Use Loop",
+        "body": "The brain fetches live OHLCV data, builds market context, and calls Nova Lite with 4 tools for deep analysis.",
+        "features": [
+            ("🧠", "Nova Brain", "Agentic Converse API with tool-use loop for market reasoning"),
+            ("🔬", "Nova Embeddings", "Multimodal scam-pattern detection via cosine similarity"),
+            ("🎙️", "Nova Voice", "Text intelligence for voice commands + Web Speech API"),
+            ("🔍", "Nova Act Auditor", "Browser-based smart contract security audits"),
+        ],
+        "gradient": "linear-gradient(135deg, #0a0a2e 0%, #0a2a3e 50%, #0a1a2e 100%)",
+    },
+    {
+        "icon": "🛡️",
+        "title": "Risk Management Pipeline",
+        "subtitle": "6-Layer Fail-Closed Gate · Capital Preservation First",
+        "body": "Every trade passes through 6 independent risk checks. If ANY check is uncertain, the trade is blocked.",
+        "features": [
+            ("⚖️", "Position Size Gate", "Caps single-trade exposure at $500"),
+            ("📉", "Daily Loss Limit", "Halts trading at -$1,000 cumulative daily loss"),
+            ("⏱️", "Trade Frequency", "Max 10 trades per rolling hour"),
+            ("🎯", "Concentration", "Max 30% capital in a single asset"),
+            ("🔮", "Confidence Floor", "Rejects low-confidence AI signals (< 40%)"),
+            ("⏰", "Intent Expiry", "Stale intents auto-rejected after 5 minutes"),
+        ],
+        "gradient": "linear-gradient(135deg, #0a0a2e 0%, #2a0a1e 50%, #1a0a2e 100%)",
+    },
+    {
+        "icon": "🔏",
+        "title": "Cryptographic Accountability",
+        "subtitle": "EIP-712 · ERC-8004 · Merkle Audit Trail",
+        "body": "Every decision is cryptographically signed and logged on-chain — creating an immutable proof of reasoning.",
+        "features": [
+            ("🔏", "EIP-712 Signing", "Typed data signatures for every trade intent"),
+            ("🆔", "Identity Registry", "Agent mints an ERC-721 NFT on-chain"),
+            ("⭐", "Reputation Registry", "Trade outcomes logged via giveFeedback()"),
+            ("📋", "Validation Artifacts", "Keccak256-hashed audit trail with Merkle root"),
+        ],
+        "gradient": "linear-gradient(135deg, #0a0a2e 0%, #1a1a0e 50%, #0a2a1e 100%)",
+    },
+    {
+        "icon": "📊",
+        "title": "Live Dashboard Features",
+        "subtitle": "14 Interactive Tabs · Real-Time Analytics",
+        "body": "Monitor everything in real time — from AI reasoning to on-chain transactions.",
+        "features": [
+            ("🧠", "Cognitive Stream", "Live AI thought feed as decisions unfold"),
+            ("🌌", "Market Regime Orb", "Animated sphere showing market state"),
+            ("🧬", "Trade DNA", "Visual fingerprint of each trade's characteristics"),
+            ("📊", "Performance Analytics", "Sharpe, Sortino, Calmar ratios + equity curve"),
+            ("🔮", "What-If Simulator", "Stress-test with volatility multiplier"),
+            ("⛓️", "DEX Execution", "Live Uniswap V3 swap execution"),
+        ],
+        "gradient": "linear-gradient(135deg, #0a0a2e 0%, #0a1a3e 50%, #1a0a2e 100%)",
+    },
+]
+
+def _render_intro_screen():
+    """Render the cinematic onboarding — 100 % client-side slide navigation."""
+    import json as _json
+    import streamlit.components.v1 as _components
+
+    total = len(_INTRO_SLIDES)
+
+    # ── FULL-PAGE intro styling: dark bg everywhere, no gaps ──
+    st.markdown("""<style>
+    /* Hide ALL Streamlit chrome */
+    section[data-testid="stSidebar"],header[data-testid="stHeader"],
+    #MainMenu,footer,.stDeployButton,.stApp>header{display:none!important}
+
+    /* Dark background EVERYWHERE — no color gaps */
+    .stApp, html, body, section.main,
+    div[data-testid="stAppViewContainer"],
+    div[data-testid="stAppViewBlockContainer"],
+    .stMainBlockContainer, .block-container,
+    div[data-testid="stVerticalBlock"],
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #0a0a1a !important;
+        background: #0a0a1a !important;
+    }
+
+    /* Zero padding everywhere */
+    .block-container,.stMainBlockContainer,
+    div[data-testid="stAppViewBlockContainer"],
+    div[data-testid="stAppViewContainer"],
+    div[data-testid="stVerticalBlock"],
+    .main .block-container,section.main>div,.stApp>div,section.main,
+    .appview-container,.main>.block-container{
+        padding:0!important;margin:0!important;max-width:100%!important}
+    .stApp [data-testid="stAppViewContainer"],
+    .stApp [data-testid="stVerticalBlockBorderWrapper"]{padding:0!important;margin:0!important}
+
+    /* Kill loaders */
+    [data-stale="true"]::before,[data-stale="true"]::after{display:none!important;content:none!important}
+    [data-stale="true"]{opacity:1!important;transition:none!important}
+    .stSpinner,.stSpinnerContainer,div[data-testid="stStatusWidget"],
+    div[data-testid="stSpinner"]{display:none!important}
+
+    /* Remove iframe border */
+    iframe{border:none!important}
+
+    /* ── Style the Streamlit buttons to match intro theme ── */
+    .intro-btn-row {
+        display: flex;
+        justify-content: center;
+        gap: 0.8rem;
+        padding: 0.5rem 1.5rem 0 1.5rem;
+        background: #0a0a1a !important;
+    }
+    .intro-btn-row .stColumn {
+        background: #0a0a1a !important;
+    }
+    /* All intro buttons base */
+    .intro-btn-row button {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.85rem !important;
+        border-radius: 8px !important;
+        padding: 0.55rem 1.8rem !important;
+        transition: all 0.15s !important;
+        cursor: pointer !important;
+    }
+    /* Skip = outline style */
+    .intro-btn-row [data-testid="stBaseButton-secondary"] button,
+    .intro-btn-row button[kind="secondary"] {
+        background: transparent !important;
+        color: #64ffda !important;
+        border: 1px solid #64ffda !important;
+    }
+    .intro-btn-row [data-testid="stBaseButton-secondary"] button:hover,
+    .intro-btn-row button[kind="secondary"]:hover {
+        background: rgba(100,255,218,0.1) !important;
+    }
+    /* Launch = filled primary */
+    .intro-btn-row [data-testid="stBaseButton-primary"] button,
+    .intro-btn-row button[kind="primary"] {
+        background: #64ffda !important;
+        color: #0a0a1a !important;
+        border: 1px solid #64ffda !important;
+        font-weight: 700 !important;
+    }
+    .intro-btn-row [data-testid="stBaseButton-primary"] button:hover,
+    .intro-btn-row button[kind="primary"]:hover {
+        background: #4fc3f7 !important;
+        border-color: #4fc3f7 !important;
+    }
+    /* Version footer */
+    .intro-ver {
+        text-align: center;
+        padding: 0.6rem 0 1rem 0;
+        font-size: 0.62rem;
+        color: #495670;
+        font-family: 'JetBrains Mono', monospace;
+        letter-spacing: 1px;
+        background: #0a0a1a !important;
+    }
+    </style>""", unsafe_allow_html=True)
+
+    # ── Build per-slide HTML fragments ──
+    slides_json_data = []
+    for idx, sl in enumerate(_INTRO_SLIDES):
+        feats = ""
+        if sl["features"]:
+            feats = '<div class="feats">'
+            for ico, name, desc in sl["features"]:
+                feats += (f'<div class="feat"><span class="fi">{ico}</span>'
+                          f'<span class="fn">{name}</span>'
+                          f'<div class="fd">{desc}</div></div>')
+            feats += "</div>"
+        slides_json_data.append({
+            "icon": sl["icon"], "title": sl["title"],
+            "subtitle": sl["subtitle"], "body": sl["body"],
+            "feats": feats,
+        })
+
+    slides_js = _json.dumps(slides_json_data)
+
+    # ── The iframe: slides + Next/Back only (no Skip/Launch) ──
+    intro_html = f"""
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+html,body{{height:100%;overflow:hidden;background:#0a0a1a;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:#ccd6f6}}
+@keyframes fadeIn{{from{{opacity:0;transform:translateY(20px)}}to{{opacity:1;transform:translateY(0)}}}}
+@keyframes glow{{0%,100%{{text-shadow:0 0 20px rgba(100,255,218,.3)}}50%{{text-shadow:0 0 40px rgba(100,255,218,.6),0 0 80px rgba(100,255,218,.2)}}}}
+@keyframes pulse{{0%,100%{{transform:scale(1)}}50%{{transform:scale(1.05)}}}}
+@keyframes shimmer{{0%{{background-position:-200% center}}100%{{background-position:200% center}}}}
+@keyframes slideIn{{from{{opacity:0;transform:translateX(-30px)}}to{{opacity:1;transform:translateX(0)}}}}
+@keyframes dotPulse{{0%,100%{{opacity:.4;transform:scale(1)}}50%{{opacity:1;transform:scale(1.3)}}}}
+
+.wrap{{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 1.5rem;text-align:center}}
+.slide{{display:flex;flex-direction:column;align-items:center;animation:fadeIn .4s ease-out}}
+.icon{{font-size:3.5rem;margin-bottom:.5rem;animation:pulse 3s ease-in-out infinite}}
+.title{{font-family:'JetBrains Mono',monospace;font-size:2.3rem;font-weight:800;
+  background:linear-gradient(135deg,#64ffda 0%,#4fc3f7 50%,#b388ff 100%);background-size:200% auto;
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  animation:shimmer 4s linear infinite,glow 3s ease-in-out infinite;margin-bottom:.15rem;line-height:1.2}}
+.sub{{font-size:.92rem;color:#8892b0;font-family:'JetBrains Mono',monospace;letter-spacing:2px;text-transform:uppercase;margin-bottom:.9rem}}
+.body{{font-size:1.05rem;color:#ccd6f6;max-width:650px;line-height:1.65;margin:0 auto 1.3rem auto}}
+.feats{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.8rem;max-width:840px;width:100%;margin:0 auto 1.2rem auto}}
+.feat{{background:rgba(12,12,31,.8);border:1px solid #1a1a3e;border-radius:12px;padding:.85rem 1.1rem;text-align:left;
+  animation:slideIn .5s ease-out both;transition:border-color .3s,transform .2s}}
+.feat:hover{{border-color:#64ffda;transform:translateY(-2px)}}
+.feat:nth-child(1){{animation-delay:.08s}}.feat:nth-child(2){{animation-delay:.12s}}
+.feat:nth-child(3){{animation-delay:.16s}}.feat:nth-child(4){{animation-delay:.2s}}
+.feat:nth-child(5){{animation-delay:.24s}}.feat:nth-child(6){{animation-delay:.28s}}
+.fi{{font-size:1.3rem;margin-right:.45rem}}
+.fn{{font-weight:700;color:#64ffda;font-size:.92rem}}
+.fd{{color:#8892b0;font-size:.8rem;margin-top:3px;line-height:1.5}}
+
+.dots{{display:flex;gap:10px;justify-content:center;margin:.8rem 0}}
+.dot{{width:10px;height:10px;border-radius:50%;background:#1a1a3e;transition:all .3s}}
+.dot.active{{background:#64ffda;box-shadow:0 0 12px rgba(100,255,218,.5);animation:dotPulse 2s ease-in-out infinite}}
+.dot.done{{background:#495670}}
+
+.nav{{display:flex;gap:.8rem;justify-content:center;margin-top:.3rem}}
+.btn{{padding:.55rem 1.8rem;border-radius:8px;border:1px solid #64ffda;background:transparent;color:#64ffda;
+  font-family:'JetBrains Mono',monospace;font-size:.85rem;cursor:pointer;transition:all .15s;outline:none}}
+.btn:hover{{background:rgba(100,255,218,.1)}}
+.btn.primary{{background:#64ffda;color:#0a0a1a;font-weight:700;border-color:#64ffda}}
+.btn.primary:hover{{background:#4fc3f7;border-color:#4fc3f7}}
+
+@media(max-width:768px){{
+  .icon{{font-size:2.5rem}}.title{{font-size:1.5rem}}.sub{{font-size:.78rem;letter-spacing:1px}}
+  .body{{font-size:.9rem}}.feats{{grid-template-columns:1fr;gap:.5rem}}
+  .fn{{font-size:.85rem}}.fd{{font-size:.76rem}}.fi{{font-size:1.15rem}}
+}}
+@media(max-width:480px){{.title{{font-size:1.2rem}}.icon{{font-size:2rem}}.body{{font-size:.82rem}}.fn{{font-size:.8rem}}.fd{{font-size:.72rem}}}}
+</style></head><body>
+<div class="wrap">
+  <div class="slide" id="slide"></div>
+  <div class="dots" id="dots"></div>
+  <div class="nav" id="nav"></div>
+</div>
+<script>
+const slides={slides_js};
+const total=slides.length;
+let cur=0;
+
+function render(){{
+  const s=slides[cur];
+  document.getElementById('slide').innerHTML=
+    '<div class="icon">'+s.icon+'</div>'+
+    '<div class="title">'+s.title+'</div>'+
+    '<div class="sub">'+s.subtitle+'</div>'+
+    '<div class="body">'+s.body+'</div>'+
+    s.feats;
+  let dh='';
+  for(let i=0;i<total;i++){{
+    let c=i===cur?'active':i<cur?'done':'';
+    dh+='<div class="dot '+c+'"></div>';
+  }}
+  document.getElementById('dots').innerHTML=dh;
+  let nh='';
+  if(cur>0) nh+='<button class="btn" onclick="go(-1)">← Back</button>';
+  if(cur<total-1){{
+    nh+='<button class="btn primary" onclick="go(1)">Next →</button>';
+  }}
+  document.getElementById('nav').innerHTML=nh;
+  const el=document.getElementById('slide');
+  el.style.animation='none';el.offsetHeight;el.style.animation='fadeIn .35s ease-out';
+}}
+
+function go(d){{cur=Math.max(0,Math.min(total-1,cur+d));render();}}
+render();
+</script></body></html>"""
+
+    _components.html(intro_html, height=650, scrolling=False)
+
+    # ── Skip / Launch: real Streamlit buttons, styled to match ──
+    st.markdown('<div class="intro-btn-row">', unsafe_allow_html=True)
+    _c1, _c2, _c3 = st.columns([1, 1, 1])
+    with _c1:
+        if st.button("Skip Intro", key="intro_skip_btn",
+                      use_container_width=True, type="secondary"):
+            st.session_state["intro_completed"] = True
+            st.query_params["intro"] = "done"
+            st.rerun()
+    with _c3:
+        if st.button("🚀 Launch Dashboard", key="intro_launch_btn",
+                      use_container_width=True, type="primary"):
+            st.session_state["intro_completed"] = True
+            st.query_params["intro"] = "done"
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="intro-ver">PROTOCOL ZERO v1.0 · Amazon Nova AI Hackathon 2026</div>',
+                unsafe_allow_html=True)
+
+
+# ── Gate: Show intro OR dashboard ─────────────────────────
+if not st.session_state["intro_completed"]:
+    _render_intro_screen()
+    st.stop()
 
 
 # ════════════════════════════════════════════════════════════
@@ -891,12 +1347,13 @@ def _get_performance_report() -> dict:
         return {}
 
 
+@st.cache_data(ttl=30, show_spinner=False)
 def _load_artifacts() -> list[dict]:
-    """Load validation artifacts from disk."""
+    """Load validation artifacts from disk (cached 30s)."""
     artifacts = []
     art_dir = pathlib.Path("artifacts")
     if art_dir.exists():
-        for f in sorted(art_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:20]:
+        for f in sorted(art_dir.glob("pz-*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:20]:
             try:
                 artifacts.append(json.loads(f.read_text()))
             except Exception as e:
@@ -932,9 +1389,11 @@ def _real_execute_trade(decision: dict, df: pd.DataFrame) -> dict:
     _t0 = time.perf_counter()
     if _HAS_RISK and _RISK_STATE is not None:
         try:
+            # ── Inject ERC-8004 reputation into decision for threshold gate ──
+            decision["reputation_score"] = st.session_state.get("reputation_score", 95)
             risk_ok, risk_msgs = run_all_checks(_RISK_STATE, decision)
             risk_results_raw = (risk_ok, risk_msgs)
-            result["risk_report"] = format_risk_report(risk_msgs)
+            result["risk_report"] = format_risk_report(_RISK_STATE, decision)
             if not risk_ok:
                 result["error"] = "Risk checks failed"
                 return result
@@ -967,7 +1426,7 @@ def _real_execute_trade(decision: dict, df: pd.DataFrame) -> dict:
     _t0 = time.perf_counter()
     if _HAS_CHAIN and _CHAIN is not None and result.get("sig"):
         try:
-            tx = _CHAIN.submit_intent(decision, result["sig"])
+            tx = _CHAIN.submit_intent(decision)
             result["tx"] = tx
             result["success"] = True
         except Exception as e:
@@ -1179,11 +1638,11 @@ def detect_regime(df: pd.DataFrame, vol_mult: float = 1.0) -> str:
     vol   = (df["volatility"].iloc[-1] if pd.notna(df["volatility"].iloc[-1]) else 0.5) * vol_mult
     sma_spread = abs(sma12 - sma26) / sma26 * 100 if sma26 else 0
 
-    if vol > 1.8:
+    if vol > 1.2:
         return "VOLATILE"
-    if sma_spread > 0.8 and (rsi > 55 or rsi < 45):
+    if sma_spread > 0.3 and (rsi > 52 or rsi < 48):
         return "TRENDING"
-    if vol < 0.6 and 40 < rsi < 60:
+    if vol < 1.0 and 38 < rsi < 62:
         return "RANGING"
     return "UNCERTAIN"
 
@@ -1230,7 +1689,7 @@ def run_analysis(df: pd.DataFrame, pair: str, vol_mult: float = 1.0) -> dict:
     base_conf = float(rng.uniform(0.55, 0.93))
     conf = round(max(0.15, base_conf - (vol_mult - 1) * 0.25), 2)
 
-    if conf < 0.6 or regime == "VOLATILE":
+    if conf < 0.4 or regime == "VOLATILE":
         action = "HOLD"
     else:
         action = str(rng.choice(["BUY", "SELL"], p=[0.55, 0.45]))
@@ -1538,6 +1997,12 @@ with st.sidebar:
                       value=st.session_state["autonomous_mode"],
                       key="auto_toggle")
     st.session_state["autonomous_mode"] = auto
+    try:
+        _auto_qp = "1" if auto else "0"
+        if _qp_get("auto", "") != _auto_qp:
+            st.query_params["auto"] = _auto_qp
+    except Exception:
+        pass
 
     if auto:
         st.markdown("""
@@ -1553,6 +2018,18 @@ with st.sidebar:
             <div style="font-size:0.7rem;color:#495670;margin-top:2px">
                 User confirms each trade</div>
         </div>""", unsafe_allow_html=True)
+
+    st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
+
+    # ── AWS Budget Tracker ────────────────────────────────
+    _api_calls = st.session_state.get("_api_calls_today", 0)
+    _api_cost = st.session_state.get("_api_cost_estimate", 0.0)
+    _budget_color = "#64ffda" if _api_calls < 400 else ("#ffd93d" if _api_calls < 500 else "#ff6b6b")
+    st.markdown(f"""<div class="mcard" style="border-left:3px solid {_budget_color};padding:0.5rem">
+        <div style="font-size:0.65rem;color:#8892b0">💰 API Budget (today)</div>
+        <div style="font-size:0.9rem;color:{_budget_color};font-weight:600">{_api_calls} / 500 calls</div>
+        <div style="font-size:0.6rem;color:#495670">~${_api_cost:.3f} est. cost</div>
+    </div>""", unsafe_allow_html=True)
 
     st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 
@@ -1595,6 +2072,7 @@ with st.sidebar:
             reg_result = _real_register_agent()
             if reg_result["success"]:
                 st.session_state["agent_registered"] = True
+                st.session_state.pop("_trust_cache", None)  # invalidate so Trust Panel refreshes
                 tx = reg_result["tx"] or "pending"
                 tx_display = tx if isinstance(tx, str) else str(tx)
                 st.session_state["last_reg_tx"] = tx_display
@@ -1611,6 +2089,7 @@ with st.sidebar:
                 _cog("✗", f"Registration failed: {err}", "err")
                 # Fallback: mark registered locally for demo
                 st.session_state["agent_registered"] = True
+                st.session_state.pop("_trust_cache", None)  # invalidate so Trust Panel refreshes
                 tx = "0x" + hashlib.sha256(
                     st.session_state["agent_name"].encode()).hexdigest()[:40]
                 _cog("▣", f"Demo TX: {tx[:20]}…", "sym")
@@ -1639,7 +2118,7 @@ with st.sidebar:
                f'target="_blank" style="color:#4fc3f7;text-decoration:none">'
                f'🧾 Registration TX ↗</a></div>' if _reg_tx else '')
             + f'<div style="margin:2px 0"><a href="{_explorer_base}/address/'
-              f'{config.IDENTITY_REGISTRY_ADDRESS}" target="_blank" '
+              f'{getattr(config, "IDENTITY_REGISTRY_ADDRESS", "N/A") if config else "N/A"}" target="_blank" '
               f'style="color:#4fc3f7;text-decoration:none">'
               f'🏛️ Identity Registry ↗</a></div>'
             f'</div>',
@@ -1941,6 +2420,11 @@ with tab_market:
         )
         if new_pair != st.session_state["selected_pair"]:
             st.session_state["selected_pair"] = new_pair
+            try:
+                if _qp_get("pair", "") != new_pair:
+                    st.query_params["pair"] = new_pair
+            except Exception:
+                pass
             load_market_data(new_pair)
             df = st.session_state["market_df"]
     with col_ref:
@@ -2095,6 +2579,91 @@ with tab_brain:
         # ── Explainable AI (XAI) Panel ─────────────────────
         st.markdown(xai_panel_html(dec, df), unsafe_allow_html=True)
 
+        # ── Agent Internal Thoughts (Transparency Panel) ──
+        with st.expander("💭 Agent Internal Thoughts — Full Reasoning Chain", expanded=True):
+            _rsi_now = float(df["rsi_14"].iloc[-1]) if pd.notna(df["rsi_14"].iloc[-1]) else 50
+            _sma12 = float(df["sma_12"].iloc[-1]) if pd.notna(df["sma_12"].iloc[-1]) else 0
+            _sma26 = float(df["sma_26"].iloc[-1]) if pd.notna(df["sma_26"].iloc[-1]) else 0
+            _vol_now = float(df["volatility"].iloc[-1]) if pd.notna(df["volatility"].iloc[-1]) else 0.5
+            _price = float(df["close"].iloc[-1])
+            _sma_cross = "Bullish" if _sma12 > _sma26 else "Bearish"
+            _rsi_zone = "Overbought" if _rsi_now > 70 else ("Oversold" if _rsi_now < 30 else "Neutral")
+
+            # Detect edge cases
+            _edge_flags = []
+            if len(df) >= 5:
+                _5ago_p = float(df["close"].iloc[-5])
+                _drop = (_price / _5ago_p - 1) * 100 if _5ago_p > 0 else 0
+                if _drop < -8:
+                    _edge_flags.append(f"⚡ Flash crash detected ({_drop:.1f}%)")
+            if _rsi_now > 85:
+                _edge_flags.append(f"🔥 Extreme RSI — mania zone ({_rsi_now:.1f})")
+            elif _rsi_now < 15:
+                _edge_flags.append(f"💀 Extreme RSI — capitulation zone ({_rsi_now:.1f})")
+            if _vol_now > 2.0:
+                _edge_flags.append(f"🌪️ High volatility regime ({_vol_now:.3f})")
+            _rep_val = st.session_state.get("reputation_score", 95)
+
+            # Build the thought chain
+            _thoughts = [
+                ("📊", "Market Data Ingestion",
+                 f"Read {len(df)} candles for {st.session_state['selected_pair']}. "
+                 f"Latest close: ${_price:,.2f}",
+                 "#4fc3f7"),
+                ("📈", "Technical Indicator Scan",
+                 f"RSI-14: {_rsi_now:.1f} ({_rsi_zone}) · SMA-12: ${_sma12:,.2f} · "
+                 f"SMA-26: ${_sma26:,.2f} · Cross: {_sma_cross}",
+                 "#b388ff"),
+                ("🌡️", "Volatility Assessment",
+                 f"20-period σ: {_vol_now:.4f} · "
+                 f"Regime: {dec.get('market_regime', 'UNCERTAIN')}",
+                 "#ffd93d"),
+                ("🧠", "AI Reasoning",
+                 dec['entry_reasoning'],
+                 "#64ffda"),
+                ("⚖️", "Risk Scoring",
+                 f"Self-assessed risk: {dec['risk_score']}/10 · "
+                 f"Position size: {dec['position_size_percent']:.1f}% · "
+                 f"SL: {dec['stop_loss_percent']:.1f}% / TP: {dec['take_profit_percent']:.1f}%",
+                 "#ff6b6b" if dec['risk_score'] > 6 else "#ffd93d"),
+                ("⭐", "ERC-8004 Reputation Gate",
+                 f"On-chain reputation: {_rep_val}% · "
+                 f"Threshold: ≥ 30% · "
+                 f"{'✅ PASSED' if _rep_val >= 30 else '❌ BLOCKED'}",
+                 "#64ffda" if _rep_val >= 30 else "#ff6b6b"),
+                ("🎯", "Final Decision",
+                 f"{dec['action']} {dec['asset']} with {dec['confidence']:.0%} confidence "
+                 f"→ ${dec['amount_usd']:,.2f}",
+                 {"BUY": "#64ffda", "SELL": "#ff6b6b"}.get(dec['action'], "#ffd93d")),
+            ]
+
+            _thought_html = '<div style="border-left:2px solid #1a1a3e;padding-left:1rem;margin:0.5rem 0">'
+            for i, (ico, title, detail, color) in enumerate(_thoughts):
+                _thought_html += f"""
+                <div style="margin-bottom:0.6rem;animation:introFadeIn 0.5s ease-out {i*0.1}s both">
+                    <div style="display:flex;align-items:center;gap:0.4rem">
+                        <span style="font-size:1rem">{ico}</span>
+                        <span style="color:{color};font-weight:700;font-size:0.78rem;
+                                     font-family:'JetBrains Mono',monospace;text-transform:uppercase;
+                                     letter-spacing:0.5px">{title}</span>
+                        <span style="flex:1;border-bottom:1px dashed #1a1a3e;margin:0 0.3rem"></span>
+                        <span style="color:#495670;font-size:0.6rem">Step {i+1}/{len(_thoughts)}</span>
+                    </div>
+                    <div style="color:#ccd6f6;font-size:0.78rem;margin-top:2px;padding-left:1.4rem;
+                                line-height:1.5">{detail}</div>
+                </div>"""
+
+            # Edge-case alerts
+            if _edge_flags:
+                _thought_html += '<div style="margin-top:0.5rem;padding:0.5rem;background:rgba(255,107,107,0.1);border:1px solid #ff6b6b33;border-radius:8px">'
+                _thought_html += '<div style="color:#ff6b6b;font-size:0.7rem;font-weight:700;margin-bottom:4px">⚠️ EDGE-CASE ALERTS</div>'
+                for _flag in _edge_flags:
+                    _thought_html += f'<div style="color:#ff6b6b;font-size:0.72rem;margin:2px 0">{_flag}</div>'
+                _thought_html += '</div>'
+
+            _thought_html += '</div>'
+            st.markdown(_thought_html, unsafe_allow_html=True)
+
         # ── AI Confidence Gauge ────────────────────────────
         col_gauge, col_bar = st.columns([1, 2])
         with col_gauge:
@@ -2243,6 +2812,9 @@ with tab_risk:
         max_pos = st.session_state["max_position_usd"]
         cap     = st.session_state["total_capital_usd"]
 
+        _rep = st.session_state.get("reputation_score", 95)
+        _risk_s = dec.get("risk_score", 5)
+
         checks: list[tuple[str, bool, str]] = [
             ("Position ≤ 2% Capital",
              dec["position_size_percent"] <= 2.0,
@@ -2254,9 +2826,15 @@ with tab_risk:
              st.session_state["session_pnl"] > -st.session_state["max_daily_loss_usd"],
              f"PnL ${st.session_state['session_pnl']:+.2f} > "
              f"-${st.session_state['max_daily_loss_usd']:.0f}"),
-            ("Confidence ≥ 60%",
-             dec["confidence"] >= 0.6,
-             f"{dec['confidence']:.0%} ≥ 60%"),
+            ("Confidence ≥ 40%",
+             dec["confidence"] >= 0.4,
+             f"{dec['confidence']:.0%} ≥ 40%"),
+            ("ERC-8004 Reputation ≥ 30%",
+             _rep >= 30,
+             f"Rep {_rep}% ≥ 30%"),
+            ("Risk Score ≤ 8/10",
+             _risk_s <= 8,
+             f"Risk {_risk_s}/10 ≤ 8/10"),
             ("Stop Loss Set",
              dec["stop_loss_percent"] > 0,
              f"SL = {dec['stop_loss_percent']:.1f}%"),
@@ -2707,29 +3285,29 @@ with tab_trust:
     st.caption("Transparent status of each Nova service — live vs. fallback")
 
     _nova_services = []
+    _aws_ready = getattr(config, "AWS_READY", False) if config else False
     # Nova Lite (Brain)
     _nova_services.append({
         "name": "Nova Lite (Brain)",
         "icon": "🧠",
-        "status": "LIVE" if config.AWS_READY else "FALLBACK",
-        "detail": "Converse API + tool-use loop" if config.AWS_READY else "Rule-based RSI/SMA engine",
-        "model": config.BEDROCK_MODEL_ID,
+        "status": "LIVE" if _aws_ready else "FALLBACK",
+        "detail": "Converse API + tool-use loop" if _aws_ready else "Rule-based RSI/SMA engine",
+        "model": getattr(config, "BEDROCK_MODEL_ID", "—") if config else "—",
     })
     # Nova Sonic / Voice
-    _voice_status = _VOICE.status() if _HAS_VOICE else {"mode": "Module not loaded"}
+    _voice_status = _NOVA_SONIC.status() if _HAS_NOVA_SONIC else {"mode": "Module not loaded"}
     _nova_services.append({
         "name": "Nova Voice / Sonic",
         "icon": "🎙️",
-        "status": "LITE+TTS" if config.AWS_READY else "TEXT-ONLY",
+        "status": "LITE+TTS" if _aws_ready else "TEXT-ONLY",
         "detail": _voice_status.get("mode", "Unknown"),
-        "model": config.NOVA_SONIC_MODEL_ID if hasattr(config, "NOVA_SONIC_MODEL_ID") else "—",
+        "model": getattr(config, "NOVA_SONIC_MODEL_ID", "—") if config else "—",
     })
     # Nova Act
     _act_status = {"method": "Module not loaded"}
-    if "_ACT" not in dir():
+    if _HAS_NOVA_ACT and _NOVA_ACT is not None:
         try:
-            from nova_act_auditor import NovaActAuditor as _TmpAct
-            _act_status = _TmpAct().status()
+            _act_status = _NOVA_ACT.status()
         except Exception:
             pass
     _nova_services.append({
@@ -2741,17 +3319,17 @@ with tab_trust:
     })
     # Nova Embeddings
     _embed_status = {"mode": "Module not loaded"}
-    try:
-        from nova_embeddings import NovaEmbeddingsAnalyzer as _TmpEmb
-        _embed_status = _TmpEmb().status()
-    except Exception:
-        pass
+    if _HAS_NOVA_EMBED and _NOVA_EMBED is not None:
+        try:
+            _embed_status = _NOVA_EMBED.status()
+        except Exception:
+            pass
     _nova_services.append({
         "name": "Nova Embeddings",
         "icon": "🔬",
         "status": "LIVE" if _embed_status.get("enabled") else "HEURISTIC",
         "detail": _embed_status.get("mode", "Unknown"),
-        "model": config.NOVA_EMBED_MODEL_ID if hasattr(config, "NOVA_EMBED_MODEL_ID") else "—",
+        "model": getattr(config, "NOVA_EMBED_MODEL_ID", "—") if config else "—",
     })
 
     _nc = st.columns(len(_nova_services))
@@ -3125,7 +3703,26 @@ with tab_audit:
     artifacts = _load_artifacts()
 
     if artifacts:
-        st.markdown(f"**{len(artifacts)}** validation artifacts on disk")
+        # Summary metrics
+        _n_signed = sum(1 for a in artifacts
+                        if (a.get("signedIntent", {}).get("signature") or "").strip())
+        _n_unsigned = len(artifacts) - _n_signed
+        _latest_hash = (artifacts[0].get("artifactHash", "") or "")[:24] or "—"
+
+        _ac1, _ac2, _ac3, _ac4 = st.columns(4)
+        with _ac1:
+            st.markdown(mcard("Total Artifacts", str(len(artifacts))), unsafe_allow_html=True)
+        with _ac2:
+            st.markdown(mcard("🔏 EIP-712 Signed", str(_n_signed)), unsafe_allow_html=True)
+        with _ac3:
+            st.markdown(mcard("📋 Unsigned", str(_n_unsigned)), unsafe_allow_html=True)
+        with _ac4:
+            st.markdown(f"""<div class="mcard">
+                <div class="lbl">Latest Hash</div>
+                <div class="val" style="color:#b388ff;font-size:0.7rem;word-break:break-all">
+                    {_latest_hash}…</div>
+            </div>""", unsafe_allow_html=True)
+
         _art_json = json.dumps(artifacts, indent=2, default=str)
         st.download_button(
             "📥  Export Artifacts (JSON)",
@@ -3136,17 +3733,20 @@ with tab_audit:
         st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 
         for i, art in enumerate(artifacts[:10]):
-            art_hash = art.get("artifact_hash", art.get("hash", "unknown"))[:16]
+            # Artifact JSON uses camelCase keys from ValidationArtifact.to_dict()
+            art_hash = art.get("artifactHash", art.get("artifact_hash", ""))[:16] or "unknown"
             art_time = art.get("timestamp", art.get("created_at", "?"))
             art_action = art.get("decision", {}).get("action", "?")
             art_asset = art.get("decision", {}).get("asset", "?")
             art_conf = art.get("decision", {}).get("confidence", 0)
-            submitted = art.get("on_chain_submitted", False)
+            # Derive on-chain status from EIP-712 signature presence
+            _sig = art.get("signedIntent", {}).get("signature", "")
+            submitted = bool(_sig and len(_sig) > 2)
 
             action_icon = {"BUY": "🟢", "SELL": "🔴"}.get(art_action, "🟡")
             css_class = {"BUY": "dec-buy", "SELL": "dec-sell"}.get(art_action, "dec-hold")
-            _chain_badge = '<span class="badge badge-green">✅ On-Chain</span>'
-            _local_badge = '<span class="badge badge-gold">📋 Local</span>'
+            _chain_badge = '<span class="badge badge-green">🔏 EIP-712 Signed</span>'
+            _local_badge = '<span class="badge badge-gold">📋 Unsigned</span>'
 
             st.markdown(f"""
             <div class="dec-box {css_class}" style="padding:0.8rem 1rem;margin:0.3rem 0">
@@ -3506,7 +4106,6 @@ with tab_nova_act:
                     except Exception as e:
                         st.error(f"Audit failed: {e}")
                         _cog("✗", f"Nova Act error: {e}", "err")
-                st.rerun()
 
         # ── Display Results ────────────────────────────
         results = st.session_state.get("nova_act_results", [])
@@ -3669,7 +4268,6 @@ with tab_voice:
                 except Exception as e:
                     st.error(f"Voice processing failed: {e}")
                     _cog("✗", f"Nova Sonic error: {e}", "err")
-            st.rerun()
 
         # ── Quick Action Buttons ───────────────────────
         st.markdown("#### ⚡ Quick Voice Commands")
@@ -3709,7 +4307,6 @@ with tab_voice:
                                 st.session_state["autonomous_mode"] = False
                         except Exception as e:
                             st.error(str(e))
-                    st.rerun()
 
         st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 
@@ -3729,7 +4326,7 @@ with tab_voice:
             if alert_msg:
                 with st.spinner("Generating voice alert…"):
                     try:
-                        alert_resp = _NOVA_SONIC.generate_alert(alert_msg, severity=alert_sev)
+                        alert_resp = _NOVA_SONIC.generate_alert(alert_sev, {"message": alert_msg})
                         alert_text = getattr(alert_resp, 'text', str(alert_resp)) if hasattr(alert_resp, 'text') else alert_resp.get('text', str(alert_resp))
                         st.session_state["nova_voice_history"].append({
                             "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
@@ -3741,7 +4338,6 @@ with tab_voice:
                         _cog("🚨", f"Alert generated: {alert_text[:60]}…", "err" if alert_sev in ("high", "critical") else "info")
                     except Exception as e:
                         st.error(str(e))
-                st.rerun()
 
         st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 
@@ -3828,7 +4424,6 @@ with tab_multimodal:
                         except Exception as e:
                             st.error(f"Analysis failed: {e}")
                             _cog("✗", f"Embeddings error: {e}", "err")
-                    st.rerun()
 
         elif embed_mode == "🖼️ Image Analysis":
             st.markdown("#### 🖼️ Image Scam Detection")
@@ -3849,7 +4444,7 @@ with tab_multimodal:
                     with st.spinner("🖼️ Analyzing image with Nova Embeddings…"):
                         _cog("🖼️", "Running multimodal image analysis…", "info")
                         try:
-                            result = _NOVA_EMBED.analyze_image(img_url)
+                            result = _NOVA_EMBED.analyze_image(img_url.encode("utf-8"), context=img_url)
                             entry = {
                                 "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
                                 "mode": "image",
@@ -3860,7 +4455,6 @@ with tab_multimodal:
                             _cog("✓", f"Image analysis — risk: {getattr(result, 'risk_label', 'N/A')}", "ok")
                         except Exception as e:
                             st.error(f"Analysis failed: {e}")
-                    st.rerun()
 
         elif embed_mode == "🔍 Logo Comparison":
             st.markdown("#### 🔍 Logo Comparison (Fake Token Detection)")
@@ -3873,7 +4467,7 @@ with tab_multimodal:
                 if logo_url1 and logo_url2:
                     with st.spinner("🔍 Comparing logos…"):
                         try:
-                            result = _NOVA_EMBED.compare_logos(logo_url1, logo_url2)
+                            result = _NOVA_EMBED.compare_logos(logo_url1.encode("utf-8"), reference_name=logo_url2)
                             entry = {
                                 "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
                                 "mode": "logo_compare",
@@ -3884,7 +4478,6 @@ with tab_multimodal:
                             _cog("✓", f"Logo comparison complete", "ok")
                         except Exception as e:
                             st.error(f"Comparison failed: {e}")
-                    st.rerun()
 
         else:  # Chart Analysis
             st.markdown("#### 📊 Chart Pattern Analysis")
@@ -3897,7 +4490,7 @@ with tab_multimodal:
                 if chart_url:
                     with st.spinner("📊 Analyzing chart pattern…"):
                         try:
-                            result = _NOVA_EMBED.analyze_chart(chart_url)
+                            result = _NOVA_EMBED.analyze_chart(chart_url.encode("utf-8"))
                             entry = {
                                 "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
                                 "mode": "chart",
@@ -3908,7 +4501,6 @@ with tab_multimodal:
                             _cog("✓", f"Chart analysis — risk: {getattr(result, 'risk_label', 'N/A')}", "ok")
                         except Exception as e:
                             st.error(f"Analysis failed: {e}")
-                    st.rerun()
 
         st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 
@@ -4017,22 +4609,60 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# Save key session values at end of each run so hard refresh can restore them.
+_persist_state()
+
 # ════════════════════════════════════════════════════════════
 #  Auto-Refresh — Autonomous Mode Live Loop
 # ════════════════════════════════════════════════════════════
 
+class _SkipCycle(Exception):
+    """Sentinel: duplicate autonomous decision — skip logging."""
+    pass
+
 if st.session_state.get("autonomous_mode") and not st.session_state.get("kill_switch_active"):
-    _auto_interval = 30  # seconds between autonomous cycles
+    _auto_interval = 90  # seconds between autonomous cycles (budget-friendly)
     _last_auto = st.session_state.get("_last_auto_run", 0)
     _now_ts = time.time()
 
+    # ── Daily API call budget guard ──────────────────────
+    _today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if st.session_state.get("_api_calls_date") != _today_str:
+        st.session_state["_api_calls_today"] = 0
+        st.session_state["_api_calls_date"] = _today_str
+    _DAILY_API_LIMIT = 500  # ~$2/day budget
+    _budget_ok = st.session_state["_api_calls_today"] < _DAILY_API_LIMIT
+
     if _now_ts - _last_auto >= _auto_interval:
-        # ── Run an autonomous analysis + trade cycle ──────
         _auto_pair = st.session_state.get("selected_pair", "ETH/USDT")
         _auto_df = st.session_state.get("market_df")
-        if _auto_df is not None and len(_auto_df) > 0:
+        if not _budget_ok:
+            _cog("💰", f"Daily API budget reached ({_DAILY_API_LIMIT} calls). "
+                 "Auto-mode paused until tomorrow.", "warn")
+        # ── Run an autonomous analysis + trade cycle ──────
+        elif _auto_df is not None and len(_auto_df) > 0:
             try:
                 _auto_dec = run_analysis(_auto_df, _auto_pair)
+                # Track API usage for cost guard
+                st.session_state["_api_calls_today"] += 1
+                st.session_state["_api_cost_estimate"] += 0.004  # ~$0.004 per converse call
+
+                # ── Duplicate detection: skip if same action+confidence ──
+                _prev_auto = st.session_state.get("_prev_auto_decision")
+                _is_dup = (
+                    _prev_auto is not None
+                    and _prev_auto.get("action") == _auto_dec["action"]
+                    and abs(_prev_auto.get("confidence", 0) - _auto_dec["confidence"]) < 0.05
+                )
+                st.session_state["_prev_auto_decision"] = {
+                    "action": _auto_dec["action"],
+                    "confidence": _auto_dec["confidence"],
+                }
+                if _is_dup:
+                    _cog("⏸", "Market unchanged — holding position", "info")
+                    st.session_state["_last_auto_run"] = _now_ts
+                    raise _SkipCycle()  # skip duplicate logging + execution
+
                 st.session_state["latest_decision"] = _auto_dec
                 st.session_state["decision_history"].append({
                     "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
@@ -4046,7 +4676,7 @@ if st.session_state.get("autonomous_mode") and not st.session_state.get("kill_sw
                      f"{_auto_dec['asset']} @ {_auto_dec['confidence']:.0%}", "info")
 
                 # Auto-execute if confidence threshold met
-                if _auto_dec["action"] != "HOLD" and _auto_dec["confidence"] >= 0.6:
+                if _auto_dec["action"] != "HOLD" and _auto_dec["confidence"] >= 0.4:
                     _auto_exec = _real_execute_trade(_auto_dec, _auto_df)
                     _recent_ret = float(_auto_df["pct_change"].dropna().tail(5).mean()) if len(_auto_df) > 5 else 0.0
                     _trade_amt = _auto_dec.get("amount_usd", 100.0)
@@ -4079,12 +4709,25 @@ if st.session_state.get("autonomous_mode") and not st.session_state.get("kill_sw
                         "etherscan": f"https://sepolia.etherscan.io/tx/{_auto_tx}",
                     })
                     _cog("✓", f"Auto-trade executed: ${_auto_pnl:+.2f}", "ok" if _auto_pnl > 0 else "warn")
+            except _SkipCycle:
+                pass  # duplicate cycle — already handled above
             except Exception as _auto_err:
                 logger.warning("Autonomous cycle error: %s", _auto_err)
                 _cog("⚠", f"Auto-cycle error: {_auto_err}", "err")
 
         st.session_state["_last_auto_run"] = _now_ts
 
-    import time as _time_mod
-    _time_mod.sleep(_auto_interval)
-    st.rerun()
+    # Lightweight auto-refresh: show countdown, only reload when cycle is due.
+    # Uses a single JS timer instead of the old sleep(5)+rerun loop that
+    # flashed the Streamlit loader every 5 seconds.
+    _remaining = max(0, int(_auto_interval - (time.time() - st.session_state.get("_last_auto_run", 0))))
+    _auto_ph = st.empty()
+    _auto_ph.caption(f"⏱️ Next autonomous cycle in **{_remaining}s**")
+    if _remaining <= 0:
+        st.rerun()
+    else:
+        import streamlit.components.v1 as _stc
+        _stc.html(
+            f'<script>setTimeout(function(){{window.parent.location.reload()}},{_remaining*1000})</script>',
+            height=0,
+        )

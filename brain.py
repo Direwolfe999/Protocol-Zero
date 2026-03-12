@@ -139,6 +139,20 @@ Rules:
 - Assess market_regime from the data: TRENDING (clear direction), RANGING (sideways),
   VOLATILE (high variance), UNCERTAIN (mixed signals).
 
+Edge-Case Stress Rules (CRITICAL — high-volatility scenarios):
+- FLASH CRASH (price drop > 8% in < 5 candles): Immediately HOLD, set confidence = 0.2,
+  risk_score = 9. Do NOT buy the dip — wait for stabilization.
+- PUMP & DUMP (price spike > 10% then reversal > 5%): HOLD with risk_score = 10.
+  Flag reason as "Pump-dump pattern detected — avoiding trap."
+- EXTREME RSI (> 85 or < 15): Force HOLD. These are capitulation/mania zones.
+  Set confidence = 0.15 and explain the RSI extreme in reason.
+- LOW LIQUIDITY (volume < 20% of 24h average): Reduce position_size_percent to ≤ 0.5%.
+  Set risk_score ≥ 7. Wide spreads make execution dangerous.
+- VOLATILITY REGIME (20-period vol > 2.0): Maximum position_size_percent = 1.0%.
+  Tighten stop_loss_percent to ≤ 2.0%.
+- DIVERGENCE (RSI rising but price falling, or vice versa): Flag as UNCERTAIN regime.
+  Reduce confidence by 30%.
+
 When you need additional data to make a better decision, use the available tools:
 - rug_pull_scanner: Check a contract address for scam/rug-pull indicators
 - market_deep_dive: Get extended micro-structure data for an asset
@@ -463,6 +477,10 @@ def invoke_brain(
         logger.info("AWS credentials not ready — using rule-based fallback brain")
         return _rule_based_decision(df, symbol, max_trade)
 
+    # Skip Bedrock if we already know it's broken this session
+    if getattr(invoke_brain, "_bedrock_failed", False):
+        return _rule_based_decision(df, symbol, max_trade)
+
     user_prompt = _build_user_prompt(df, symbol, max_trade)
 
     # ── Bedrock Converse API (Nova 2 Lite with Tool-Use) ──────
@@ -493,10 +511,9 @@ def invoke_brain(
         try:
             response = client.converse(**converse_kwargs)
         except Exception as exc:
-            raise BedrockError(
-                f"Bedrock converse API call failed: {exc}",
-                details={"model": config.BEDROCK_MODEL_ID},
-            ) from exc
+            logger.warning("Bedrock API failed — falling back to rule-based: %s", exc)
+            invoke_brain._bedrock_failed = True  # Don't retry this session
+            return _rule_based_decision(df, symbol, max_trade)
         stop_reason = response.get("stopReason", "end_turn")
         output_msg = response["output"]["message"]
         messages.append(output_msg)
@@ -566,6 +583,66 @@ def _rule_based_decision(
     sma26  = float(latest.get("sma_26", price)) if pd.notna(latest.get("sma_26")) else price
     vol    = float(latest.get("volatility", 0.5)) if pd.notna(latest.get("volatility")) else 0.5
 
+    # ── Edge-case stress detection ─────────────────────────
+    # Flash crash: >8% drop in last 5 candles
+    if len(df) >= 5:
+        _5ago = float(df["close"].iloc[-5])
+        _price_drop_pct = (price / _5ago - 1) * 100 if _5ago > 0 else 0
+    else:
+        _price_drop_pct = 0
+
+    # Pump & dump: >10% spike then >5% reversal
+    _pump_dump = False
+    if len(df) >= 10:
+        _peak = float(df["close"].iloc[-10:].max())
+        _spike_up = (_peak / float(df["close"].iloc[-10]) - 1) * 100
+        _reversal = (_peak - price) / _peak * 100 if _peak > 0 else 0
+        _pump_dump = _spike_up > 10 and _reversal > 5
+
+    # Volume drought
+    _vol_avg = float(df["volume"].tail(24).mean()) if len(df) >= 24 else 1.0
+    _vol_prev = float(df["volume"].tail(48).head(24).mean()) if len(df) >= 48 else _vol_avg
+    _low_liquidity = (_vol_avg / _vol_prev < 0.20) if _vol_prev > 0 else False
+
+    # RSI divergence (RSI rising + price falling or vice versa)
+    _rsi_divergence = False
+    if len(df) >= 5:
+        _rsi_5ago = float(df["rsi_14"].iloc[-5]) if pd.notna(df["rsi_14"].iloc[-5]) else 50
+        _price_dir = price > _5ago  # price rising
+        _rsi_dir = rsi > _rsi_5ago  # RSI rising
+        _rsi_divergence = _price_dir != _rsi_dir and abs(rsi - _rsi_5ago) > 5
+
+    # ── EDGE CASE: Flash crash ─────────────────────────────
+    if _price_drop_pct < -8:
+        return {
+            "action": "HOLD", "asset": asset, "amount_usd": 0.0,
+            "reason": f"FLASH CRASH detected: {_price_drop_pct:.1f}% drop in 5 candles — waiting for stabilization",
+            "confidence": 0.20, "risk_score": 9,
+            "position_size_percent": 0.0, "stop_loss_percent": 0.0,
+            "take_profit_percent": 0.0, "market_regime": "VOLATILE",
+        }
+
+    # ── EDGE CASE: Pump & dump ─────────────────────────────
+    if _pump_dump:
+        return {
+            "action": "HOLD", "asset": asset, "amount_usd": 0.0,
+            "reason": f"PUMP-DUMP pattern detected: {_spike_up:.1f}% spike then {_reversal:.1f}% reversal — avoiding trap",
+            "confidence": 0.15, "risk_score": 10,
+            "position_size_percent": 0.0, "stop_loss_percent": 0.0,
+            "take_profit_percent": 0.0, "market_regime": "VOLATILE",
+        }
+
+    # ── EDGE CASE: Extreme RSI ─────────────────────────────
+    if rsi > 85 or rsi < 15:
+        zone = "mania" if rsi > 85 else "capitulation"
+        return {
+            "action": "HOLD", "asset": asset, "amount_usd": 0.0,
+            "reason": f"EXTREME RSI ({rsi:.1f}) in {zone} zone — forced HOLD until normalization",
+            "confidence": 0.15, "risk_score": 8,
+            "position_size_percent": 0.0, "stop_loss_percent": 0.0,
+            "take_profit_percent": 0.0, "market_regime": "VOLATILE",
+        }
+
     # Regime detection
     if vol > 2.0:
         regime = "VOLATILE"
@@ -616,6 +693,19 @@ def _rule_based_decision(
     # Position sizing
     if action in ("BUY", "SELL"):
         size_pct = min(2.0, confidence * 1.5)
+        # ── Low liquidity cap ──────────────────────────────
+        if _low_liquidity:
+            size_pct = min(size_pct, 0.5)
+            risk_score = max(risk_score, 7)
+            reason += " [Low liquidity — position capped]"
+        # ── High volatility cap ────────────────────────────
+        if vol > 2.0:
+            size_pct = min(size_pct, 1.0)
+        # ── RSI divergence penalty ─────────────────────────
+        if _rsi_divergence:
+            confidence = round(max(0.15, confidence * 0.7), 2)
+            regime = "UNCERTAIN"
+            reason += " [RSI divergence detected]"
         amount = round(max_trade * size_pct / 100, 2)
     else:
         size_pct = 0.0

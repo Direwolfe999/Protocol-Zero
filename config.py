@@ -55,13 +55,13 @@ def _try_anvil_fallback() -> bool:
     if not _env_local.exists():
         return False           # no .env.local to fall back to
 
-    # Quick connectivity check — 4 second timeout
+    # Quick connectivity check — 3 second timeout
     import subprocess
     rpc = os.getenv("RPC_URL", "")
     try:
         result = subprocess.run(
             ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
-             "-m", "4", "-X", "POST", rpc,
+             "-m", "3", "-X", "POST", rpc,
              "-H", "Content-Type: application/json",
              "-d", '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'],
             capture_output=True, text=True, timeout=5,
@@ -69,7 +69,23 @@ def _try_anvil_fallback() -> bool:
         if result.stdout.strip() == "200":
             return False       # production RPC is reachable
     except Exception:
-        pass                   # curl failed — activate fallback
+        pass                   # curl failed — check if local fallback is viable
+
+    # Only fall back if local Anvil is actually running
+    try:
+        result = subprocess.run(
+            ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+             "-m", "2", "-X", "POST", "http://127.0.0.1:8545",
+             "-H", "Content-Type: application/json",
+             "-d", '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'],
+            capture_output=True, text=True, timeout=3,
+        )
+        if result.stdout.strip() != "200":
+            print("⚠️  Sepolia RPC slow but Anvil not running — staying on Sepolia")
+            return False       # Anvil isn't running either, keep production RPC
+    except Exception:
+        print("⚠️  Sepolia RPC slow but Anvil not running — staying on Sepolia")
+        return False           # Anvil isn't running either
 
     print("⚠️  Sepolia RPC unreachable — activating Anvil fallback (.env.local)")
     load_dotenv(_env_local, override=True)

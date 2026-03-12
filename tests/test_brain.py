@@ -93,7 +93,7 @@ class TestRuleBasedDecision:
     def test_oversold_triggers_buy(self, oversold_df: pd.DataFrame) -> None:
         decision = _rule_based_decision(oversold_df, "BTC/USDT", 500.0)
         assert decision["action"] == "BUY"
-        assert decision["confidence"] > 0.4
+        assert decision["confidence"] >= 0.15  # can be reduced by divergence penalty
 
     def test_insufficient_data_returns_hold(self) -> None:
         short_df = pd.DataFrame({"close": [100, 101, 102]})

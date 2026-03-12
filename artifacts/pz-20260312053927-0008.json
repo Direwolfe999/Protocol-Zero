@@ -1,0 +1,32 @@
+{
+  "agentAddress": "0x0000000000000000000000000000000000000000",
+  "artifactHash": "0xc48416df40fbf38f4a097400e864f2674668a8daa997d315278764223aef2515",
+  "artifactId": "pz-20260312053927-0008",
+  "chainId": 11155111,
+  "decision": {
+    "action": "SELL",
+    "amount_usd": 182.0,
+    "asset": "ETH",
+    "confidence": 0.91,
+    "market_regime": "UNCERTAIN",
+    "position_size_percent": 1.82,
+    "risk_score": 3
+  },
+  "marketSnapshot": {
+    "price": 3070.1002556476083,
+    "rsi": 39.42347044646957,
+    "volatility": 0.5669711360325597
+  },
+  "performanceMetrics": {},
+  "reasoningTrace": "Distribution pattern emerging. RSI 39 nearing exhaustion. SMA convergence signals reversal. The tide is turning — strategic exit.",
+  "riskAssessment": {
+    "checks": [],
+    "passed": true
+  },
+  "schemaVersion": "erc8004-validation-v1",
+  "signedIntent": {
+    "intentHash": "",
+    "signature": ""
+  },
+  "timestamp": "2026-03-12T05:39:27.377818+00:00"
+}

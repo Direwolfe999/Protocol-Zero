@@ -31,3 +31,5 @@ build/
 # ── OS ────────────────────────────────────
 .DS_Store
 Thumbs.db
+.streamlit/secrets.toml
+artifacts/session_state.json

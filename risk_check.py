@@ -68,6 +68,8 @@ class RiskState:
     max_trades_per_hour: int     = 10
     max_concentration_pct: float = 0.30       # 30 % of capital in one asset
     total_capital_usd: float     = 10_000.0   # portfolio notional (override as needed)
+    min_reputation_score: float  = 30.0       # ERC-8004 min rep % to allow trading
+    max_risk_score: int          = 8          # max AI risk-score (1-10) ceiling
 
     # ── Running counters (mutated at runtime) ─────────────
     daily_pnl_usd: float                      = 0.0
@@ -223,6 +225,61 @@ def check_intent_expiry(
     return True, f"Intent valid for {int(expiry) - now}s"
 
 
+def check_erc8004_reputation(
+    state: RiskState,
+    decision: dict[str, Any],
+) -> tuple[bool, str]:
+    """
+    REJECT if the agent's on-chain ERC-8004 reputation score
+    is below the minimum threshold required for autonomous trading.
+
+    Why: ERC-8004 mandates that agents maintain a positive reputation
+    before being trusted to execute financial transactions.  A low
+    reputation signals previous bad trades, reverts, or negative
+    feedback — the agent should be paused until trust is restored.
+
+    The reputation score is injected into the decision dict by the
+    dashboard / orchestrator layer before calling run_all_checks().
+    If no score is available (agent not registered), we allow with a warning.
+    """
+    rep_score = decision.get("reputation_score")
+    threshold = state.min_reputation_score
+
+    if rep_score is None:
+        return True, f"Reputation: not available (threshold {threshold}%) — allowing"
+
+    rep_score = float(rep_score)
+    if rep_score < threshold:
+        return False, (
+            f"ERC-8004 reputation {rep_score:.0f}% < "
+            f"minimum threshold {threshold:.0f}% — agent untrusted"
+        )
+    return True, f"ERC-8004 reputation {rep_score:.0f}% ≥ {threshold:.0f}% OK"
+
+
+def check_risk_score_ceiling(
+    state: RiskState,
+    decision: dict[str, Any],
+) -> tuple[bool, str]:
+    """
+    REJECT if the AI's self-assessed risk score exceeds the
+    maximum tolerable threshold.
+
+    Why: Even if the model is confident, a very high risk score
+    (7+) indicates dangerous market conditions.  This acts as a
+    secondary circuit-breaker layered on top of confidence.
+    """
+    risk_score = int(decision.get("risk_score", 5))
+    ceiling = state.max_risk_score
+
+    if risk_score > ceiling:
+        return False, (
+            f"Risk score {risk_score}/10 exceeds ceiling "
+            f"{ceiling}/10 — too dangerous"
+        )
+    return True, f"Risk score {risk_score}/10 ≤ {ceiling}/10 OK"
+
+
 # ════════════════════════════════════════════════════════════
 #  Composite: run every check in sequence
 # ════════════════════════════════════════════════════════════
@@ -235,6 +292,8 @@ ALL_CHECKS = [
     check_concentration,
     check_confidence_floor,
     check_intent_expiry,
+    check_erc8004_reputation,
+    check_risk_score_ceiling,
 ]
 
 
