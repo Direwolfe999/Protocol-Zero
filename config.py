@@ -31,6 +31,22 @@ _env_local = _project_root / ".env.local"
 _env_path  = _project_root / ".env"
 _active_env = "none"
 
+
+def _load_streamlit_secrets() -> bool:
+    """Load flat Streamlit Cloud secrets into os.environ when .env is absent."""
+    try:
+        import streamlit as st  # type: ignore
+
+        loaded = False
+        for key in st.secrets.keys():
+            value = st.secrets.get(key)
+            if isinstance(value, (str, int, float, bool)) and key not in os.environ:
+                os.environ[key] = str(value)
+                loaded = True
+        return loaded
+    except Exception:
+        return False
+
 if _env_path.exists():
     load_dotenv(_env_path, override=True)
     _active_env = "production"
@@ -39,8 +55,11 @@ elif _env_local.exists():
     load_dotenv(_env_local, override=True)
     _active_env = "local"
     print("⚠️  No .env found — loaded .env.local (Anvil fallback)")
+elif _load_streamlit_secrets():
+    _active_env = "streamlit"
+    print("✅  Loaded Streamlit Cloud secrets")
 else:
-    print("⛔  No .env or .env.local found. Copy .env.example → .env and fill in your keys.")
+    print("⛔  No .env, .env.local, or Streamlit secrets found. Copy .env.example → .env and fill in your keys.")
     sys.exit(1)
 
 
