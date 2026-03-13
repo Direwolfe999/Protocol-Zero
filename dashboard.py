@@ -55,7 +55,15 @@ def _init_chain():
     except Exception:
         return None, False
 
-_CHAIN, _HAS_CHAIN = _init_chain()
+_CHAIN, _HAS_CHAIN = None, False
+
+
+def _ensure_chain() -> tuple[Any | None, bool]:
+    """Lazily initialize chain connector to keep cloud startup fast."""
+    global _CHAIN, _HAS_CHAIN
+    if _CHAIN is None:
+        _CHAIN, _HAS_CHAIN = _init_chain()
+    return _CHAIN, _HAS_CHAIN
 
 @st.cache_resource(show_spinner=False)
 def _init_perf():
@@ -108,7 +116,15 @@ def _init_dex():
     except Exception:
         return None, False
 
-_DEX, _HAS_DEX = _init_dex()
+_DEX, _HAS_DEX = None, False
+
+
+def _ensure_dex() -> tuple[Any | None, bool]:
+    """Lazily initialize DEX executor to avoid blocking app boot."""
+    global _DEX, _HAS_DEX
+    if _DEX is None:
+        _DEX, _HAS_DEX = _init_dex()
+    return _DEX, _HAS_DEX
 
 @st.cache_resource(show_spinner=False)
 def _init_nova_act():
@@ -1363,13 +1379,14 @@ def _load_artifacts() -> list[dict]:
 
 def _real_register_agent() -> dict:
     """Register agent on-chain via Identity Registry."""
-    if not _HAS_CHAIN or _CHAIN is None:
+    chain_obj, has_chain = _ensure_chain()
+    if not has_chain or chain_obj is None:
         return {"success": False, "tx": None, "error": "Chain not available"}
     try:
         from metadata_handler import generate_metadata
         metadata = generate_metadata()
         agent_uri = json.dumps(metadata)
-        tx = _CHAIN.register_agent(agent_uri)
+        tx = chain_obj.register_agent(agent_uri)
         return {"success": True, "tx": tx, "error": None}
     except Exception as e:
         return {"success": False, "tx": None, "error": str(e)}
@@ -1424,9 +1441,10 @@ def _real_execute_trade(decision: dict, df: pd.DataFrame) -> dict:
 
     # Step 3: On-chain submission
     _t0 = time.perf_counter()
-    if _HAS_CHAIN and _CHAIN is not None and result.get("sig"):
+    chain_obj, has_chain = _ensure_chain() if result.get("sig") else (None, False)
+    if has_chain and chain_obj is not None and result.get("sig"):
         try:
-            tx = _CHAIN.submit_intent(decision)
+            tx = chain_obj.submit_intent(decision)
             result["tx"] = tx
             result["success"] = True
         except Exception as e:
@@ -1434,17 +1452,18 @@ def _real_execute_trade(decision: dict, df: pd.DataFrame) -> dict:
             result["error"] = f"Chain submission error: {e}"
 
     # Step 3b: DEX swap (Uniswap V3 — real token execution)
-    if _HAS_DEX and _DEX is not None and _DEX.enabled:
+    dex_obj, has_dex = _ensure_dex()
+    if has_dex and dex_obj is not None and dex_obj.enabled:
         try:
             current_price = float(df["close"].iloc[-1]) if df is not None and len(df) > 0 else 0.0
-            swap = _DEX.execute_swap(decision, current_price)
+            swap = dex_obj.execute_swap(decision, current_price)
             result["swap"] = swap.to_dict()
             if swap.success:
                 result["success"] = True
                 result["tx"] = swap.tx_hash or result.get("tx")
                 # Update wallet balances in session
                 try:
-                    bals = _DEX.get_balances()
+                    bals = dex_obj.get_balances()
                     st.session_state["wallet_eth"] = bals["eth"]
                     st.session_state["wallet_weth"] = bals["weth"]
                     st.session_state["wallet_usdc"] = bals["usdc"]
