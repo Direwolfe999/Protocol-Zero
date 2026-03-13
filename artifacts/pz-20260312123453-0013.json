@@ -1,0 +1,73 @@
+{
+  "agentAddress": "0x0000000000000000000000000000000000000000",
+  "artifactHash": "0x61280518a453eed1a51acf00f99333dd3a3ed2405f830552dae34f8b3f666bfe",
+  "artifactId": "pz-20260312123453-0013",
+  "chainId": 11155111,
+  "decision": {
+    "action": "SELL",
+    "amount_usd": 162.0,
+    "asset": "ETH",
+    "confidence": 0.81,
+    "market_regime": "RANGING",
+    "position_size_percent": 1.62,
+    "risk_score": 2
+  },
+  "marketSnapshot": {
+    "price": 2065.27,
+    "rsi": 51.71169413830084,
+    "volatility": 0.4255399294842253
+  },
+  "performanceMetrics": {},
+  "reasoningTrace": "Distribution pattern emerging. RSI 52 nearing exhaustion. SMA convergence signals reversal. The tide is turning — strategic exit.",
+  "riskAssessment": {
+    "checks": [
+      {
+        "check": "check_max_position_size",
+        "detail": "Position size OK",
+        "passed": true
+      },
+      {
+        "check": "check_daily_loss_limit",
+        "detail": "Daily PnL $+0.00 within limits",
+        "passed": true
+      },
+      {
+        "check": "check_trade_frequency",
+        "detail": "Trade frequency OK (0/10 per hour)",
+        "passed": true
+      },
+      {
+        "check": "check_concentration",
+        "detail": "Concentration in ETH: 2% OK",
+        "passed": true
+      },
+      {
+        "check": "check_confidence_floor",
+        "detail": "Confidence 81% OK",
+        "passed": true
+      },
+      {
+        "check": "check_intent_expiry",
+        "detail": "No expiry field — skipping check",
+        "passed": true
+      },
+      {
+        "check": "check_erc8004_reputation",
+        "detail": "ERC-8004 reputation 75% ≥ 30% OK",
+        "passed": true
+      },
+      {
+        "check": "check_risk_score_ceiling",
+        "detail": "Risk score 2/10 ≤ 8/10 OK",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "schemaVersion": "erc8004-validation-v1",
+  "signedIntent": {
+    "intentHash": "{\"action\": \"SELL\", \"agent\": \"0xDD1255b21bEcC13E9A7614b37632BaE50FEEBF98\", \"amountUsd\": 16200, \"asset\": \"ETH\", \"confidence\": 8100, \"expiry\": 1773319193, \"nonce\": 13, \"riskScore\": 2}",
+    "signature": "6fe940124496f0c2e9a0fcf0034dd9d51acc00af69b62c28a26a3f2424b6eb780f966e6e99e81b3074cd360a7e6d43634bb32dd68c4de08d44129e43b5805efc1c"
+  },
+  "timestamp": "2026-03-12T12:34:53.960164+00:00"
+}

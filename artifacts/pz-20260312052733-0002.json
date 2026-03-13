@@ -1,0 +1,32 @@
+{
+  "agentAddress": "0x0000000000000000000000000000000000000000",
+  "artifactHash": "0x0e81380cbc0b3838c44155f650666137760745556be097c5730e67556d2c53ee",
+  "artifactId": "pz-20260312052733-0002",
+  "chainId": 11155111,
+  "decision": {
+    "action": "BUY",
+    "amount_usd": 174.0,
+    "asset": "ETH",
+    "confidence": 0.87,
+    "market_regime": "UNCERTAIN",
+    "position_size_percent": 1.74,
+    "risk_score": 3
+  },
+  "marketSnapshot": {
+    "price": 3070.1002556476083,
+    "rsi": 39.42347044646957,
+    "volatility": 0.5669711360325597
+  },
+  "performanceMetrics": {},
+  "reasoningTrace": "SMA-12/26 bullish crossover confirmed. RSI at 39 — momentum building. The pattern whispers accumulation. UNCERTAIN regime favors entry.",
+  "riskAssessment": {
+    "checks": [],
+    "passed": true
+  },
+  "schemaVersion": "erc8004-validation-v1",
+  "signedIntent": {
+    "intentHash": "",
+    "signature": ""
+  },
+  "timestamp": "2026-03-12T05:27:33.198677+00:00"
+}

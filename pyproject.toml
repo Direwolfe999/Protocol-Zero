@@ -1,0 +1,58 @@
+[project]
+name = "protocol-zero"
+version = "2.0.0"
+description = "Autonomous trust-minimized DeFi trading agent built on ERC-8004 with Amazon Nova AI"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{name = "Protocol Zero Team"}]
+keywords = ["defi", "trading", "erc-8004", "eip-712", "amazon-nova", "bedrock", "autonomous-agent"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "boto3>=1.34.0",
+    "web3>=6.15.0",
+    "python-dotenv>=1.0.0",
+    "ccxt>=4.2.0",
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+    "streamlit>=1.31.0",
+    "plotly>=5.18.0",
+    "eth-account>=0.11.0",
+    "eth-abi>=5.0.0",
+    "websockets>=12.0",
+]
+
+[project.optional-dependencies]
+nova-act = ["nova-act>=0.1.0"]
+dev = ["pytest>=8.0.0", "pytest-cov>=4.1.0", "ruff>=0.3.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+markers = [
+    "unit: pure logic tests with no external dependencies",
+    "integration: tests requiring chain / API connectivity",
+]
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "tests/*",
+    ".venv/*",
+    "__pycache__/*",
+    "dashboard.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 40

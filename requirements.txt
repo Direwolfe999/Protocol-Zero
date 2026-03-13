@@ -1,0 +1,28 @@
+# ============================================================
+#  Protocol Zero — Python Dependencies
+# ============================================================
+#  Install:  pip install -r requirements.txt
+# ============================================================
+
+# ── Core ──────────────────────────────────────────────────
+boto3>=1.34.0          # AWS SDK — Amazon Bedrock (Nova Lite, Sonic, Embeddings)
+web3>=6.15.0           # Ethereum / EVM interaction
+python-dotenv>=1.0.0   # Load .env into os.environ
+ccxt>=4.2.0            # Crypto exchange market data (OHLCV)
+pandas>=2.2.0          # Tabular data manipulation
+numpy>=1.26.0          # Numerical computing (performance metrics)
+streamlit>=1.31.0      # Dashboard UI
+plotly>=5.18.0         # Interactive charts (candlestick, volume)
+eth-account>=0.11.0    # EIP-712 structured signing
+eth-abi>=5.0.0         # ABI encoding helpers
+websockets>=12.0       # WebSocket support for real-time feeds
+
+# ── Optional: Amazon Nova Act (install separately if available) ──
+# nova-act is an invite-only SDK — install manually if you have access:
+#   pip install nova-act
+# The system falls back to simulated audits when unavailable.
+
+# ── Development / Testing ──────────────────────────────────
+pytest>=8.0.0          # Test runner
+pytest-cov>=4.1.0      # Coverage reporting
+ruff>=0.3.0            # Fast Python linter

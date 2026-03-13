@@ -1,0 +1,73 @@
+{
+  "agentAddress": "0x0000000000000000000000000000000000000000",
+  "artifactHash": "0xe188787d6048cb13a9ab3bc972fe6e1db514623c7968fe4d7f363de841b1475c",
+  "artifactId": "pz-20260312062247-0006",
+  "chainId": 11155111,
+  "decision": {
+    "action": "BUY",
+    "amount_usd": 170.0,
+    "asset": "ETH",
+    "confidence": 0.85,
+    "market_regime": "UNCERTAIN",
+    "position_size_percent": 1.7,
+    "risk_score": 2
+  },
+  "marketSnapshot": {
+    "price": 2028.52,
+    "rsi": 27.441097175009006,
+    "volatility": 0.559619942845625
+  },
+  "performanceMetrics": {},
+  "reasoningTrace": "SMA-12/26 bullish crossover confirmed. RSI at 27 — momentum building. The pattern whispers accumulation. UNCERTAIN regime favors entry.",
+  "riskAssessment": {
+    "checks": [
+      {
+        "check": "check_max_position_size",
+        "detail": "Position size OK",
+        "passed": true
+      },
+      {
+        "check": "check_daily_loss_limit",
+        "detail": "Daily PnL $+0.00 within limits",
+        "passed": true
+      },
+      {
+        "check": "check_trade_frequency",
+        "detail": "Trade frequency OK (0/10 per hour)",
+        "passed": true
+      },
+      {
+        "check": "check_concentration",
+        "detail": "Concentration in ETH: 2% OK",
+        "passed": true
+      },
+      {
+        "check": "check_confidence_floor",
+        "detail": "Confidence 85% OK",
+        "passed": true
+      },
+      {
+        "check": "check_intent_expiry",
+        "detail": "No expiry field — skipping check",
+        "passed": true
+      },
+      {
+        "check": "check_erc8004_reputation",
+        "detail": "ERC-8004 reputation 0% < minimum threshold 30% — agent untrusted",
+        "passed": false
+      },
+      {
+        "check": "check_risk_score_ceiling",
+        "detail": "Risk score 2/10 ≤ 8/10 OK",
+        "passed": true
+      }
+    ],
+    "passed": false
+  },
+  "schemaVersion": "erc8004-validation-v1",
+  "signedIntent": {
+    "intentHash": "{\"action\": \"BUY\", \"agent\": \"0xDD1255b21bEcC13E9A7614b37632BaE50FEEBF98\", \"amountUsd\": 17000, \"asset\": \"ETH\", \"confidence\": 8500, \"expiry\": 1773296867, \"nonce\": 6, \"riskScore\": 2}",
+    "signature": "c2498b87ee8eeb91232a495c6287e07ef1ec68d7580667889b253ce11a3cb61246638a2d5a760bb331eccaf647dd4ffb796c44e476d15984d088962b939ef21d1b"
+  },
+  "timestamp": "2026-03-12T06:22:47.025909+00:00"
+}
