@@ -37,6 +37,7 @@ logger = logging.getLogger("protocol_zero.chain")
 # ── Retry config ──────────────────────────────────────────
 MAX_TX_RETRIES: int = 3
 RETRY_BASE_DELAY: float = 2.0  # seconds — exponential backoff base
+RPC_TIMEOUT_SECONDS: int = 8
 
 # ════════════════════════════════════════════════════════════
 #  ERC-8004 Compliant ABIs for the Three Registries
@@ -242,7 +243,12 @@ class ChainInteractor:
 
     def __init__(self) -> None:
         # ── Web3 connection ────────────────────────────────
-        self.w3 = Web3(Web3.HTTPProvider(config.RPC_URL))
+        self.w3 = Web3(
+            Web3.HTTPProvider(
+                config.RPC_URL,
+                request_kwargs={"timeout": RPC_TIMEOUT_SECONDS},
+            )
+        )
         # Support PoA chains (Polygon, BSC, testnets …)
         self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
 

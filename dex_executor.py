@@ -33,6 +33,7 @@ import config
 from exceptions import DexExecutionError
 
 logger = logging.getLogger("protocol_zero.dex")
+RPC_TIMEOUT_SECONDS: int = 8
 
 # ════════════════════════════════════════════════════════════
 #  Uniswap V3 SwapRouter ABI (exactInputSingle only)
@@ -178,7 +179,12 @@ class DexExecutor:
 
     def __init__(self) -> None:
         # ── Web3 connection ─────────────────────────────
-        self.w3 = Web3(Web3.HTTPProvider(config.RPC_URL))
+        self.w3 = Web3(
+            Web3.HTTPProvider(
+                config.RPC_URL,
+                request_kwargs={"timeout": RPC_TIMEOUT_SECONDS},
+            )
+        )
         if not self.w3.is_connected():
             raise DexExecutionError(f"Cannot connect to RPC: {config.RPC_URL}")
 
