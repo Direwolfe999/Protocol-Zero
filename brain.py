@@ -66,14 +66,41 @@ def fetch_market_data(
     MarketDataError
         If the exchange is unreachable or returns invalid data.
     """
-    try:
-        exchange = ccxt.binance({"enableRateLimit": True})   # no auth needed for public data
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-    except ccxt.BaseError as exc:
+    exchange_specs = [
+        ("binance", [symbol, symbol.replace("USDT", "USD")]),
+        ("coinbase", [symbol.replace("USDT", "USD"), symbol]),
+        ("kraken", [symbol.replace("USDT", "USD"), symbol]),
+    ]
+
+    ohlcv = None
+    last_exc: Exception | None = None
+    for ex_name, symbols in exchange_specs:
+        ex_cls = getattr(ccxt, ex_name, None)
+        if ex_cls is None:
+            continue
+        try:
+            exchange = ex_cls({"enableRateLimit": True, "timeout": 5000})
+        except Exception as exc:
+            last_exc = exc
+            continue
+
+        for s in symbols:
+            try:
+                ohlcv = exchange.fetch_ohlcv(s, timeframe=timeframe, limit=limit)
+                if ohlcv:
+                    logger.info("Market data source: %s (%s)", ex_name, s)
+                    break
+            except ccxt.BaseError as exc:
+                last_exc = exc
+                continue
+        if ohlcv:
+            break
+
+    if not ohlcv:
         raise MarketDataError(
-            f"Failed to fetch {symbol} data: {exc}",
+            f"Failed to fetch {symbol} data from all exchanges: {last_exc}",
             details={"symbol": symbol, "timeframe": timeframe},
-        ) from exc
+        )
 
     if not ohlcv:
         raise MarketDataError(
@@ -483,8 +510,13 @@ def invoke_brain(
 
     user_prompt = _build_user_prompt(df, symbol, max_trade)
 
-    # ── Bedrock Converse API (Nova 2 Lite with Tool-Use) ──────
+    # ── Bedrock Converse API (Nova Lite with Tool-Use) ─────────
     client = _get_bedrock_client()
+
+    model_id = getattr(config, "BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0") or "amazon.nova-lite-v1:0"
+    if ":" not in model_id:
+        logger.warning("Invalid BEDROCK_MODEL_ID '%s' — falling back to amazon.nova-lite-v1:0", model_id)
+        model_id = "amazon.nova-lite-v1:0"
 
     messages = [
         {
@@ -497,7 +529,7 @@ def invoke_brain(
     max_tool_rounds = 3
     for round_num in range(max_tool_rounds + 1):
         converse_kwargs = dict(
-            modelId=config.BEDROCK_MODEL_ID,
+            modelId=model_id,
             messages=messages,
             system=[{"text": _SYSTEM_PROMPT}],
             inferenceConfig={
@@ -511,7 +543,13 @@ def invoke_brain(
         try:
             response = client.converse(**converse_kwargs)
         except Exception as exc:
-            logger.warning("Bedrock API failed — falling back to rule-based: %s", exc)
+            logger.warning(
+                "Bedrock API failed — model=%s region=%s error=%s",
+                model_id,
+                getattr(config, "AWS_DEFAULT_REGION", "unknown"),
+                exc,
+                exc_info=True,
+            )
             invoke_brain._bedrock_failed = True  # Don't retry this session
             return _rule_based_decision(df, symbol, max_trade)
         stop_reason = response.get("stopReason", "end_turn")
@@ -575,6 +613,8 @@ def _rule_based_decision(
     """
     if df is None or len(df) < 26:
         return _default_hold()
+
+    asset = symbol.split("/")[0] if "/" in symbol else symbol
 
     latest = df.iloc[-1]
     price  = float(latest["close"])
@@ -710,8 +750,6 @@ def _rule_based_decision(
     else:
         size_pct = 0.0
         amount = 0.0
-
-    asset = symbol.split("/")[0] if "/" in symbol else symbol
 
     logger.info("Rule-based decision: %s %s (conf=%.2f, RSI=%.1f, regime=%s)",
                 action, asset, confidence, rsi, regime)

@@ -2360,9 +2360,10 @@ def _system_health_check():
         checks["Sepolia RPC"] = ("⛓️", "OFF", 0)
 
     # AWS Bedrock
-    _aws_ok = all(os.getenv(k, "").startswith(("AK", "SK")) is False
-                   and os.getenv(k, "") not in ("", "your_aws_access_key", "your_aws_secret_key")
-                   for k in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"))
+    _ak = os.getenv("AWS_ACCESS_KEY_ID", "").strip()
+    _sk = os.getenv("AWS_SECRET_ACCESS_KEY", "").strip()
+    _aws_ok = bool(_ak and _sk and _ak not in ("your_aws_access_key", "your-access-key-id")
+                   and _sk not in ("your_aws_secret_key", "your-secret-access-key"))
     checks["AWS Bedrock"] = ("🧠", "READY" if _aws_ok else "FALLBACK", 0)
 
     return checks
