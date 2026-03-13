@@ -19,13 +19,13 @@ and a multi-layered risk management pipeline.
 
 > **📺 Demo Video** — *Coming soon before final submission.*
 >
-> Run `streamlit run dashboard.py` to see Protocol Zero live: AI-driven market analysis, EIP-712 intent signing, and on-chain ERC-8004 registration — all in one cinematic dashboard.
+> Run `streamlit run streamlit_app.py` to see Protocol Zero live: AI-driven market analysis, EIP-712 intent signing, and on-chain ERC-8004 registration — all in one cinematic dashboard.
 
 ---
 
 ## 📸 Screenshots
 
-> Run `streamlit run dashboard.py` to experience the full cinematic dashboard: cognitive stream, market regime orb, trade DNA, risk heat-map, XAI reasoning panel, and more.
+> Run `streamlit run streamlit_app.py` to experience the full cinematic dashboard: cognitive stream, market regime orb, trade DNA, risk heat-map, XAI reasoning panel, and more.
 >
 > *Screenshots will be added before final submission.*
 
@@ -121,7 +121,7 @@ python main.py
 python main.py --loop
 
 # Launch the dashboard
-streamlit run dashboard.py
+streamlit run streamlit_app.py
 ```
 
 ---
@@ -246,7 +246,7 @@ The system falls back to simulated audits when unavailable.
 pip install streamlit plotly
 
 # Run from the project root
-streamlit run dashboard.py --server.port 8502
+streamlit run streamlit_app.py --server.port 8502
 ```
 
 ### EIP-712 signature mismatch
@@ -264,6 +264,7 @@ Protocol-Zero/
 ├── chain_interactor.py       # Web3 bridge for ERC-8004 registries
 ├── config.py                 # Centralized .env loader with validation
 ├── dashboard.py              # Streamlit cinematic dashboard
+├── streamlit_app.py          # Streamlit Cloud entrypoint (main module)
 ├── dex_executor.py           # Uniswap V3 live swap execution
 ├── eip712_signer.py          # EIP-712 structured data signing
 ├── exceptions.py             # Custom exception hierarchy
