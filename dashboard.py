@@ -1582,7 +1582,7 @@ def _generate_synthetic_ohlcv(symbol: str, hours: int = 72) -> pd.DataFrame:
 def _try_fetch_live(symbol: str) -> pd.DataFrame | None:
     try:
         import ccxt
-        ex = ccxt.binance({"enableRateLimit": True})
+        ex = ccxt.binance({"enableRateLimit": True, "timeout": 3000})
         ohlcv = ex.fetch_ohlcv(symbol, timeframe="1h", limit=72)
         df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
@@ -2281,7 +2281,7 @@ def _system_health_check():
     _t = time.perf_counter()
     try:
         import ccxt as _ccxt_hc  # noqa: F811
-        _ccxt_hc.binance({"enableRateLimit": True}).fetch_ticker("ETH/USDT")
+        _ccxt_hc.binance({"enableRateLimit": True, "timeout": 2000}).fetch_ticker("ETH/USDT")
         checks["Binance Feed"] = ("📡", "LIVE", round((time.perf_counter() - _t) * 1000))
     except Exception:
         checks["Binance Feed"] = ("📡", "OFF", 0)
