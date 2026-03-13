@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 # Maximum seconds before live audit is killed and simulated fallback kicks in
-_LIVE_AUDIT_TIMEOUT = 5
+_LIVE_AUDIT_TIMEOUT = int(os.getenv("NOVA_ACT_TIMEOUT_SEC", "25"))
 
 import config
 
@@ -96,15 +96,22 @@ class NovaActAuditor:
         self.api_key = config.NOVA_ACT_API_KEY
         self._nova_act_available = False
         self._NovaAct = None
+        self._allow_browser_install = os.getenv("NOVA_ACT_ALLOW_BROWSER", "false").lower() == "true"
 
         if self.enabled and self.api_key:
-            # Skip Playwright browser install attempt — we use simulated fallback
-            os.environ.setdefault("NOVA_ACT_SKIP_PLAYWRIGHT_INSTALL", "1")
+            # Default behavior keeps startup stable on cloud.
+            # Set NOVA_ACT_ALLOW_BROWSER=true to allow live Playwright browser setup.
+            if not self._allow_browser_install:
+                os.environ.setdefault("NOVA_ACT_SKIP_PLAYWRIGHT_INSTALL", "1")
             try:
                 from nova_act import NovaAct
                 self._NovaAct = NovaAct
                 self._nova_act_available = True
-                logger.info("✅ Nova Act SDK loaded — live UI audits enabled")
+                logger.info(
+                    "✅ Nova Act SDK loaded — live UI audits enabled (browser_install=%s, timeout=%ss)",
+                    self._allow_browser_install,
+                    _LIVE_AUDIT_TIMEOUT,
+                )
             except ImportError:
                 logger.warning("nova-act package not installed — using simulated audits")
         else:
