@@ -1,3 +1,13 @@
+---
+title: Protocol Zero
+emoji: 🛡️
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # 🛡️ Protocol Zero — Autonomous ERC-8004 DeFi Trading Agent
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
