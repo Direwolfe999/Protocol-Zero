@@ -1601,12 +1601,34 @@ def _generate_synthetic_ohlcv(symbol: str, hours: int = 72) -> pd.DataFrame:
 def _try_fetch_live(symbol: str) -> pd.DataFrame | None:
     try:
         import ccxt
-        ex = ccxt.binance({"enableRateLimit": True, "timeout": 3000})
-        ohlcv = ex.fetch_ohlcv(symbol, timeframe="1h", limit=72)
-        df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
-        _add_indicators(df)
-        return df
+        exchange_specs = [
+            ("binance", [symbol, symbol.replace("USDT", "USD")]),
+            ("coinbase", [symbol.replace("USDT", "USD"), symbol]),
+            ("kraken", [symbol.replace("USDT", "USD"), symbol]),
+            ("bitfinex", [symbol.replace("USDT", "USD"), symbol]),
+        ]
+
+        for ex_name, symbols in exchange_specs:
+            ex_cls = getattr(ccxt, ex_name, None)
+            if ex_cls is None:
+                continue
+            try:
+                ex = ex_cls({"enableRateLimit": True, "timeout": 4000})
+            except Exception:
+                continue
+
+            for s in symbols:
+                try:
+                    ohlcv = ex.fetch_ohlcv(s, timeframe="1h", limit=72)
+                    if not ohlcv:
+                        continue
+                    df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+                    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+                    _add_indicators(df)
+                    return df
+                except Exception:
+                    continue
+        return None
     except Exception:
         return None
 
@@ -2296,12 +2318,34 @@ def _system_health_check():
     """Ping real subsystems and return status + latency."""
     checks: dict[str, tuple[str, str, int]] = {}  # name → (icon, status, ms)
 
-    # CCXT / Binance public API
+    # CCXT feed health: Binance first, then fallback exchanges
     _t = time.perf_counter()
     try:
         import ccxt as _ccxt_hc  # noqa: F811
-        _ccxt_hc.binance({"enableRateLimit": True, "timeout": 2000}).fetch_ticker("ETH/USDT")
-        checks["Binance Feed"] = ("📡", "LIVE", round((time.perf_counter() - _t) * 1000))
+
+        _feed_name = "Binance Feed"
+        _feed_status = "OFF"
+        _feed_ms = 0
+
+        try:
+            _ccxt_hc.binance({"enableRateLimit": True, "timeout": 3000}).fetch_ticker("ETH/USDT")
+            _feed_status = "LIVE"
+            _feed_ms = round((time.perf_counter() - _t) * 1000)
+        except Exception:
+            for _ex_name in ("coinbase", "kraken", "bitfinex"):
+                try:
+                    _ex_cls = getattr(_ccxt_hc, _ex_name, None)
+                    if _ex_cls is None:
+                        continue
+                    _ex_cls({"enableRateLimit": True, "timeout": 3000}).fetch_ticker("ETH/USD")
+                    _feed_name = f"{_ex_name.capitalize()} Feed"
+                    _feed_status = "FALLBACK"
+                    _feed_ms = round((time.perf_counter() - _t) * 1000)
+                    break
+                except Exception:
+                    continue
+
+        checks[_feed_name] = ("📡", _feed_status, _feed_ms)
     except Exception:
         checks["Binance Feed"] = ("📡", "OFF", 0)
 
