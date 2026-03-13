@@ -32,6 +32,18 @@ _env_path  = _project_root / ".env"
 _active_env = "none"
 
 
+def _has_runtime_env() -> bool:
+    """Return True when required vars are already injected by the host platform."""
+    required = (
+        "RPC_URL",
+        "PRIVATE_KEY",
+        "IDENTITY_REGISTRY_ADDRESS",
+        "REPUTATION_REGISTRY_ADDRESS",
+        "VALIDATION_REGISTRY_ADDRESS",
+    )
+    return all(bool(os.getenv(k, "").strip()) for k in required)
+
+
 def _load_streamlit_secrets() -> bool:
     """Load flat Streamlit Cloud secrets into os.environ when .env is absent."""
     try:
@@ -58,6 +70,9 @@ elif _env_local.exists():
 elif _load_streamlit_secrets():
     _active_env = "streamlit"
     print("✅  Loaded Streamlit Cloud secrets")
+elif _has_runtime_env():
+    _active_env = "runtime-env"
+    print("✅  Loaded environment variables from host runtime")
 else:
     print("⛔  No .env, .env.local, or Streamlit secrets found. Copy .env.example → .env and fill in your keys.")
     sys.exit(1)
