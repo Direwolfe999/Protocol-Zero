@@ -238,6 +238,27 @@ Falls back to keyword/hash heuristics when AWS is unavailable.
 This is normal when `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` are not set.
 The system uses a technical-indicator-driven fallback engine (RSI + SMA crossovers).
 
+### "ValidationException: Operation not allowed" (Bedrock Converse)
+If your dashboard shows AWS as configured but Bedrock runtime calls fail with:
+
+`ValidationException: Operation not allowed`
+
+this usually means **partial AWS access**:
+- IAM credentials are valid
+- control-plane checks may work
+- but **runtime model invocation is blocked** at account/org/region/model level
+
+In this state, Protocol Zero now:
+- marks Nova Brain as **BLOCKED/FALLBACK** in status views
+- suppresses noisy retry loops
+- uses the deterministic rule-based decision engine until Bedrock runtime access is enabled
+
+To fix at AWS side:
+- Verify Bedrock model access approval for `amazon.nova-lite-v1:0`
+- Confirm region alignment (`AWS_DEFAULT_REGION`)
+- Check org SCP/permission boundaries for `bedrock:Converse` / `bedrock:InvokeModel`
+- Open AWS Support if runtime remains blocked despite IAM allow policies
+
 ### "Cannot reach RPC" error
 Check your `RPC_URL` in `.env`. For local testing, start Anvil:
 ```bash

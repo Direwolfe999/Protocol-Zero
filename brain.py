@@ -543,14 +543,26 @@ def invoke_brain(
         try:
             response = client.converse(**converse_kwargs)
         except Exception as exc:
-            logger.warning(
-                "Bedrock API failed — model=%s region=%s error=%s",
-                model_id,
-                getattr(config, "AWS_DEFAULT_REGION", "unknown"),
-                exc,
-                exc_info=True,
-            )
+            _err_msg = str(exc)
+            _is_not_allowed = "Operation not allowed" in _err_msg or "ValidationException" in _err_msg
+            if _is_not_allowed:
+                logger.warning(
+                    "Bedrock blocked by account/runtime policy — model=%s region=%s error=%s. "
+                    "Falling back to rule-based engine.",
+                    model_id,
+                    getattr(config, "AWS_DEFAULT_REGION", "unknown"),
+                    _err_msg,
+                )
+            else:
+                logger.warning(
+                    "Bedrock API failed — model=%s region=%s error=%s",
+                    model_id,
+                    getattr(config, "AWS_DEFAULT_REGION", "unknown"),
+                    _err_msg,
+                    exc_info=True,
+                )
             invoke_brain._bedrock_failed = True  # Don't retry this session
+            invoke_brain._bedrock_fail_reason = _err_msg
             return _rule_based_decision(df, symbol, max_trade)
         stop_reason = response.get("stopReason", "end_turn")
         output_msg = response["output"]["message"]

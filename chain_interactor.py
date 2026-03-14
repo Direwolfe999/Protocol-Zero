@@ -380,8 +380,45 @@ class ChainInteractor:
             self._agent_id = token_id
             return token_id
         except Exception:
+            # Some identity contracts are not ERC-721 enumerable.
+            # Fallback: discover token id from Transfer logs to this wallet.
+            token_id = self._discover_token_id_from_logs()
+            if token_id > 0:
+                self._agent_id = token_id
+                return token_id
             logger.debug("Agent token ID not available (agent may not be registered yet).")
             return 0
+
+    def _discover_token_id_from_logs(self) -> int:
+        """Best-effort token ID discovery using ERC-721 Transfer logs."""
+        try:
+            latest = int(self.w3.eth.block_number)
+            topic0 = Web3.keccak(text="Transfer(address,address,uint256)")
+            to_topic = "0x" + self.address.lower().replace("0x", "").rjust(64, "0")
+
+            # Progressive windows to reduce RPC load on fast paths
+            for window in (120_000, 400_000, 1_200_000):
+                from_block = max(0, latest - window)
+                logs = self.w3.eth.get_logs({
+                    "address": self.identity.address,
+                    "fromBlock": from_block,
+                    "toBlock": "latest",
+                    "topics": [topic0, None, to_topic],
+                })
+                for lg in reversed(logs):
+                    topics = lg.get("topics", [])
+                    if len(topics) < 4:
+                        continue
+                    token_id = int(topics[3].hex(), 16)
+                    try:
+                        owner = self.identity.functions.ownerOf(token_id).call()
+                        if owner and owner.lower() == self.address.lower():
+                            return token_id
+                    except Exception:
+                        continue
+        except Exception as e:
+            logger.debug("Token ID discovery from logs failed: %s", e)
+        return 0
 
     def set_metadata(self, key: str, value: str) -> str:
         """Set a metadata key-value pair on the Identity Registry."""

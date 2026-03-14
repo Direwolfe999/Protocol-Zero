@@ -26,6 +26,7 @@ import hashlib
 import json
 import logging
 import math
+import re
 import time
 from datetime import datetime, timezone, timedelta
 from typing import Any
@@ -125,6 +126,18 @@ def _ensure_dex() -> tuple[Any | None, bool]:
     if _DEX is None:
         _DEX, _HAS_DEX = _init_dex()
     return _DEX, _HAS_DEX
+
+
+def _set_dex_enabled_runtime(enabled: bool) -> bool:
+    """Enable/disable DEX executor at runtime, independent of .env defaults."""
+    dex_obj, has_dex = _ensure_dex()
+    if not has_dex or dex_obj is None:
+        return False
+    try:
+        dex_obj.enabled = bool(enabled)
+        return True
+    except Exception:
+        return False
 
 @st.cache_resource(show_spinner=False)
 def _init_nova_act():
@@ -649,13 +662,46 @@ section[data-testid="stSidebar"] {
 /* ══════════════════════════════════════════════════════════
    UTILITY — Smooth font scaling with clamp() for fluidity
    ══════════════════════════════════════════════════════════ */
-.mcard .val    { font-size: clamp(0.78rem, 2.5vw, 1.45rem); }
+.mcard .val    {
+    font-size: clamp(0.72rem, 2.1vw, 1.2rem);
+    line-height: 1.15;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
 .mcard .lbl    { font-size: clamp(0.45rem, 1.2vw, 0.7rem); }
 .cog-stream    { font-size: clamp(0.52rem, 1.4vw, 0.78rem); }
 .hm-cell .hm-val { font-size: clamp(0.72rem, 2vw, 1.2rem); }
 .dec-box       { font-size: clamp(0.62rem, 1.6vw, 0.9rem); }
 .orb-label     { font-size: clamp(0.5rem, 1.5vw, 0.85rem); }
 .regime-orb    { width: clamp(45px, 12vw, 120px); height: clamp(45px, 12vw, 120px); }
+
+/* ══════════════════════════════════════════════════════════
+   TABS — Clean text + bright bottom slider
+   ══════════════════════════════════════════════════════════ */
+button[data-baseweb="tab"] {
+    opacity: 1 !important;
+    color: #b7c6f2 !important;
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    transition: color .14s ease, border-color .14s ease !important;
+}
+button[data-baseweb="tab"]:hover {
+    color: #e6eeff !important;
+    background: transparent !important;
+    border-bottom-color: rgba(79,195,247,.55) !important;
+}
+button[data-baseweb="tab"][aria-selected="true"] {
+    opacity: 1 !important;
+    color: #ffffff !important;
+    background: transparent !important;
+    border-bottom: 3px solid #64ffda !important;
+    box-shadow: inset 0 -1px 0 rgba(100,255,218,.35) !important;
+    font-weight: 700 !important;
+}
 
 /* ══════════════════════════════════════════════════════════
    COPY / SELECT PROTECTION
@@ -729,73 +775,19 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ── Nova AI Loader + Anti-Dimming (Bullet-proof CSS-only) ────
-# ::before = full-screen solid backdrop (NO box-shadow hack)
-# ::after  = spinning ring + text via separate fixed element
+# ── Fast Navigation Mode (Disable heavy stale loader) ─────────
 st.markdown("""
 <style>
-/* ══════════════════════════════════════════════════════════
-   ANTI-DIMMING — nuclear override for ALL Streamlit versions
-   ══════════════════════════════════════════════════════════ */
-[data-stale="true"],
-[data-stale="true"] *,
-.stApp [data-testid="stAppViewContainer"],
-.stApp [data-testid="stAppViewContainer"] *,
-section.main, section.main *,
-[data-testid="stVerticalBlockBorderWrapper"],
-.element-container {
+/* Keep UI fully interactive and skip stale overlay/spinner effects */
+[data-stale="true"]::before,
+[data-stale="true"]::after {
+    display: none !important;
+    content: none !important;
+}
+[data-stale="true"] {
     opacity: 1 !important;
     transition: none !important;
 }
-
-/* ══════════════════════════════════════════════════════════
-   NOVA AI LOADER  (CSS-only, zero JS, battery-safe)
-   ──────────────────────────────────────────────────────────
-   ::before  →  full-screen solid backdrop (no box-shadow)
-   ::after   →  spinning gradient ring
-   Both use will-change for GPU compositing (no CPU jank)
-   350ms delay so quick reruns never flash the loader
-   ══════════════════════════════════════════════════════════ */
-@keyframes pzSpin {
-    to { transform: translate(-50%, -50%) rotate(360deg); }
-}
-
-/* ── Full-screen backdrop — proper element, not box-shadow ── */
-[data-stale="true"]::before {
-    content: '';
-    position: fixed;
-    inset: 0;                           /* covers entire viewport */
-    z-index: 999998;
-    background: rgba(6, 6, 18, 0.18);
-    opacity: 0;
-    animation: pzShow .15s ease .35s forwards;
-    pointer-events: none;
-    will-change: opacity;               /* GPU layer */
-}
-
-/* ── Spinner ring — centered, GPU-accelerated ── */
-[data-stale="true"]::after {
-    content: '';
-    position: fixed;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%) rotate(0deg);
-    z-index: 999999;
-    width: 56px; height: 56px;
-    border-radius: 50%;
-    border: 3px solid rgba(100, 255, 218, 0.12);
-    border-top-color: #64ffda;
-    border-right-color: #b388ff;
-    opacity: 0;
-    animation: pzSpin .7s linear infinite,
-               pzShow .15s ease .35s forwards;
-    pointer-events: none;
-    will-change: transform, opacity;    /* GPU layer — no CPU jank on battery */
-}
-
-@keyframes pzShow { to { opacity: 1; } }
-
-/* Streamlit built-in spinner — match theme */
-.stSpinner > div > div { border-top-color: #64ffda !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -836,6 +828,11 @@ _DEFAULTS: dict[str, Any] = {
     "reputation_score": 95,
     "agent_registered": False,
     "autonomous_mode":  _AUTO_QP,
+    "cog_stream_live":  False,
+    "cog_refresh_sec":  15,
+    "market_live_refresh": False,
+    "market_refresh_sec": 15,
+    "_last_market_refresh": 0.0,
 
     "selected_pair":    _PAIR_QP,
     "market_df":        None,
@@ -890,7 +887,7 @@ _DEFAULTS: dict[str, Any] = {
     "calibration_data":    [],  # list of {predicted_conf, actual_outcome}
 
     # ── DEX / Wallet ──────────────────────────────────
-    "dex_enabled":         _HAS_DEX and getattr(_DEX, 'enabled', False),
+    "dex_enabled":         bool(getattr(config, "DEX_ENABLED", False)) if config else False,
     "wallet_eth":          0.0,
     "wallet_weth":         0.0,
     "wallet_usdc":         0.0,
@@ -904,6 +901,7 @@ _DEFAULTS: dict[str, Any] = {
     # ── Intro / Onboarding ────────────────────────────
     "intro_completed":     "intro" in st.query_params and st.query_params["intro"] == "done",
     "intro_slide":         0,
+    "_intro_transition_active": False,
 }
 
 for _k, _v in _DEFAULTS.items():
@@ -1141,25 +1139,25 @@ def _render_intro_screen():
     .intro-btn-row [data-testid="stBaseButton-secondary"] button,
     .intro-btn-row button[kind="secondary"] {
         background: transparent !important;
-        color: #64ffda !important;
-        border: 1px solid #64ffda !important;
+        color: #3ec9ad !important;
+        border: 1px solid #3ec9ad !important;
     }
     .intro-btn-row [data-testid="stBaseButton-secondary"] button:hover,
     .intro-btn-row button[kind="secondary"]:hover {
-        background: rgba(100,255,218,0.1) !important;
+        background: rgba(62,201,173,0.12) !important;
     }
     /* Launch = filled primary */
     .intro-btn-row [data-testid="stBaseButton-primary"] button,
     .intro-btn-row button[kind="primary"] {
-        background: #64ffda !important;
+        background: #3ec9ad !important;
         color: #0a0a1a !important;
-        border: 1px solid #64ffda !important;
+        border: 1px solid #3ec9ad !important;
         font-weight: 700 !important;
     }
     .intro-btn-row [data-testid="stBaseButton-primary"] button:hover,
     .intro-btn-row button[kind="primary"]:hover {
-        background: #4fc3f7 !important;
-        border-color: #4fc3f7 !important;
+        background: #36b89d !important;
+        border-color: #36b89d !important;
     }
     /* Version footer */
     .intro-ver {
@@ -1233,9 +1231,11 @@ html,body{{height:100%;overflow:hidden;background:#0a0a1a;font-family:'Segoe UI'
 .nav{{display:flex;gap:.8rem;justify-content:center;margin-top:.3rem}}
 .btn{{padding:.55rem 1.8rem;border-radius:8px;border:1px solid #64ffda;background:transparent;color:#64ffda;
   font-family:'JetBrains Mono',monospace;font-size:.85rem;cursor:pointer;transition:all .15s;outline:none}}
-.btn:hover{{background:rgba(100,255,218,.1)}}
-.btn.primary{{background:#64ffda;color:#0a0a1a;font-weight:700;border-color:#64ffda}}
-.btn.primary:hover{{background:#4fc3f7;border-color:#4fc3f7}}
+.btn{{padding:.55rem 1.8rem;border-radius:8px;border:1px solid #3ec9ad;background:transparent;color:#3ec9ad;
+    font-family:'JetBrains Mono',monospace;font-size:.85rem;cursor:pointer;transition:all .15s;outline:none}}
+.btn:hover{{background:rgba(62,201,173,.12)}}
+.btn.primary{{background:#3ec9ad;color:#0a0a1a;font-weight:700;border-color:#3ec9ad}}
+.btn.primary:hover{{background:#36b89d;border-color:#36b89d}}
 
 @media(max-width:768px){{
   .icon{{font-size:2.5rem}}.title{{font-size:1.5rem}}.sub{{font-size:.78rem;letter-spacing:1px}}
@@ -1290,12 +1290,14 @@ render();
     with _c1:
         if st.button("Skip Intro", key="intro_skip_btn",
                       use_container_width=True, type="secondary"):
+            st.session_state["_intro_transition_active"] = True
             st.session_state["intro_completed"] = True
             st.query_params["intro"] = "done"
             st.rerun()
     with _c3:
         if st.button("🚀 Launch Dashboard", key="intro_launch_btn",
                       use_container_width=True, type="primary"):
+            st.session_state["_intro_transition_active"] = True
             st.session_state["intro_completed"] = True
             st.query_params["intro"] = "done"
             st.rerun()
@@ -1310,6 +1312,31 @@ if not st.session_state["intro_completed"]:
     _render_intro_screen()
     st.stop()
 
+# One-time transition loader only when exiting intro.
+if st.session_state.get("_intro_transition_active", False):
+    st.markdown("""
+    <style>
+    .pz-intro-loader-wrap{min-height:58vh;display:flex;align-items:center;justify-content:center}
+    .pz-intro-loader{
+        display:flex;align-items:center;gap:.7rem;
+        background:rgba(12,12,31,.72);border:1px solid #1a1a3e;border-radius:12px;
+        padding:.75rem 1rem;color:#ccd6f6;font-family:'JetBrains Mono',monospace;font-size:.8rem;
+    }
+    .pz-intro-dot{
+        width:14px;height:14px;border-radius:50%;
+        border:2px solid rgba(100,255,218,.25);border-top-color:#64ffda;
+        animation:pzIntroSpin .45s linear infinite;
+    }
+    @keyframes pzIntroSpin{to{transform:rotate(360deg)}}
+    </style>
+    <div class="pz-intro-loader-wrap">
+      <div class="pz-intro-loader"><span class="pz-intro-dot"></span>Launching dashboard…</div>
+    </div>
+    """, unsafe_allow_html=True)
+    time.sleep(0.18)
+    st.session_state["_intro_transition_active"] = False
+    st.rerun()
+
 
 # ════════════════════════════════════════════════════════════
 #  Real-Time Data Connectors
@@ -1317,11 +1344,15 @@ if not st.session_state["intro_completed"]:
 
 def _fetch_on_chain_identity() -> dict:
     """Pull live identity data from ERC-8004 Identity Registry."""
-    if not _HAS_CHAIN or _CHAIN is None:
+    chain_obj, has_chain = _ensure_chain()
+    if not has_chain or chain_obj is None:
         return {"registered": False, "token_id": None, "error": "Chain not available"}
     try:
-        registered = _CHAIN.is_registered()
-        token_id = _CHAIN.get_token_id() if registered else None
+        registered = chain_obj.is_registered()
+        token_id = chain_obj.get_token_id() if registered else None
+        if token_id and token_id > 0:
+            st.session_state["on_chain_token_id"] = token_id
+            st.session_state["agent_registered"] = True
         return {"registered": registered, "token_id": token_id, "error": None}
     except Exception as e:
         return {"registered": False, "token_id": None, "error": str(e)}
@@ -1329,11 +1360,18 @@ def _fetch_on_chain_identity() -> dict:
 
 def _fetch_on_chain_reputation() -> dict:
     """Pull live reputation from ERC-8004 Reputation Registry."""
-    if not _HAS_CHAIN or _CHAIN is None:
+    chain_obj, has_chain = _ensure_chain()
+    if not has_chain or chain_obj is None:
         return {"score": None, "count": 0, "error": "Chain not available"}
     try:
-        summary = _CHAIN.get_reputation_summary()
-        return {"score": summary.get("cumulative_value"), "count": summary.get("total_feedback", 0),
+        summary = chain_obj.get_reputation_summary()
+        score = summary.get("cumulative_value")
+        count = summary.get("total_feedback", 0)
+        if count is not None:
+            st.session_state["on_chain_rep_count"] = int(count)
+        if score is not None:
+            st.session_state["reputation_score"] = int(score)
+        return {"score": score, "count": count,
                 "error": None}
     except Exception as e:
         logger.warning("Reputation fetch failed: %s", e)
@@ -1342,12 +1380,15 @@ def _fetch_on_chain_reputation() -> dict:
 
 def _fetch_validation_summary() -> dict:
     """Pull live validation stats from ERC-8004 Validation Registry."""
-    if not _HAS_CHAIN or _CHAIN is None:
+    chain_obj, has_chain = _ensure_chain()
+    if not has_chain or chain_obj is None:
         return {"total": 0, "approved": 0, "error": "Chain not available"}
     try:
-        summary = _CHAIN.get_validation_summary()
-        return {"total": summary.get("total_requests", 0),
-                "approved": summary.get("approved", 0), "error": None}
+        summary = chain_obj.get_validation_summary()
+        total = int(summary.get("total_requests", 0) or 0)
+        approved = int(summary.get("approved", 0) or 0)
+        st.session_state["on_chain_val_count"] = total
+        return {"total": total, "approved": approved, "error": None}
     except Exception as e:
         logger.warning("Validation summary fetch failed: %s", e)
         return {"total": 0, "approved": 0, "error": str(e)}
@@ -1375,6 +1416,57 @@ def _load_artifacts() -> list[dict]:
             except Exception as e:
                 logger.warning("Failed to load artifact %s: %s", f.name, e)
     return artifacts
+
+
+def _normalize_tx_hash(tx: Any) -> str:
+    """Return a normalized 0x-prefixed tx hash if possible, else ''."""
+    if tx is None:
+        return ""
+    tx_str = str(tx).strip()
+    if tx_str.startswith("HexBytes(") and tx_str.endswith(")"):
+        tx_str = tx_str.split("'", 2)[1] if "'" in tx_str else tx_str
+    # Extract tx hash from mixed strings like "TX: 0xabc..." or persisted blobs
+    m = re.search(r"0x[a-fA-F0-9]{64}", tx_str)
+    if m:
+        return m.group(0)
+    return tx_str
+
+
+def _is_tx_hash(value: str) -> bool:
+    return bool(re.fullmatch(r"0x[a-fA-F0-9]{64}", str(value or "").strip()))
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _fetch_native_eth_balance(wallet_address: str) -> float | None:
+    """Read native ETH balance directly from chain (works even if DEX module is off)."""
+    if not wallet_address:
+        return None
+    chain_obj, has_chain = _ensure_chain()
+    if not has_chain or chain_obj is None:
+        return None
+    try:
+        from web3 import Web3
+        checksum = Web3.to_checksum_address(wallet_address)
+        wei = chain_obj.w3.eth.get_balance(checksum)
+        return float(chain_obj.w3.from_wei(wei, "ether"))
+    except Exception:
+        return None
+
+
+def _get_eth_usd_price_hint() -> float:
+    """Use current market data when available; otherwise return baseline ETH/USD."""
+    df = st.session_state.get("market_df")
+    pair = str(st.session_state.get("selected_pair", "ETH/USDT"))
+    try:
+        if isinstance(df, pd.DataFrame) and not df.empty and "close" in df.columns:
+            last = float(df["close"].iloc[-1])
+            if last > 0:
+                if pair.startswith("ETH/"):
+                    return last
+                return float(_BASE_PRICES.get("ETH/USDT", 3420.0))
+    except Exception:
+        pass
+    return float(_BASE_PRICES.get("ETH/USDT", 3420.0))
 
 
 def _real_register_agent() -> dict:
@@ -1453,6 +1545,10 @@ def _real_execute_trade(decision: dict, df: pd.DataFrame) -> dict:
 
     # Step 3b: DEX swap (Uniswap V3 — real token execution)
     dex_obj, has_dex = _ensure_dex()
+    if has_dex and dex_obj is not None:
+        # Runtime toggle from UI takes precedence over static .env value.
+        _set_dex_enabled_runtime(bool(st.session_state.get("dex_enabled", getattr(dex_obj, "enabled", False))))
+
     if has_dex and dex_obj is not None and dex_obj.enabled:
         try:
             current_price = float(df["close"].iloc[-1]) if df is not None and len(df) > 0 else 0.0
@@ -2052,6 +2148,20 @@ with st.sidebar:
             <div style="font-size:0.7rem;color:#8892b0;margin-top:2px">
                 AI executes trades automatically</div>
         </div>""", unsafe_allow_html=True)
+
+        # Live cognitive stream refresh controls (lightweight)
+        st.session_state["cog_stream_live"] = st.toggle(
+            "Live Cognitive Stream",
+            value=st.session_state.get("cog_stream_live", False),
+            key="cog_stream_live_toggle",
+            help="Refresh dashboard periodically so cognitive stream feels real-time.",
+        )
+        st.session_state["cog_refresh_sec"] = st.select_slider(
+            "Stream refresh cadence",
+            options=[10, 15, 30, 60],
+            value=int(st.session_state.get("cog_refresh_sec", 15)),
+            key="cog_refresh_sec_slider",
+        )
     else:
         st.markdown("""
         <div class="auto-badge-off">
@@ -2114,17 +2224,27 @@ with st.sidebar:
             if reg_result["success"]:
                 st.session_state["agent_registered"] = True
                 st.session_state.pop("_trust_cache", None)  # invalidate so Trust Panel refreshes
-                tx = reg_result["tx"] or "pending"
-                tx_display = tx if isinstance(tx, str) else str(tx)
-                st.session_state["last_reg_tx"] = tx_display
-                _cog("▣", f"TX: {tx_display[:24]}…", "sym")
+                tx_display = _normalize_tx_hash(reg_result.get("tx"))
+                if _is_tx_hash(tx_display):
+                    st.session_state["last_reg_tx"] = tx_display
+                    _cog("▣", f"TX: {tx_display[:24]}…", "sym")
+                else:
+                    # Preserve previous valid tx if this call returns "already registered"
+                    prev_tx = _normalize_tx_hash(st.session_state.get("last_reg_tx", ""))
+                    st.session_state["last_reg_tx"] = prev_tx if _is_tx_hash(prev_tx) else None
+                    _cog("▣", "Already registered — no new tx hash returned", "info")
                 _cog("✓", "Agent registered on ERC-8004 Identity Registry", "ok")
                 st.session_state["tx_log"].append({
                     "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
                     "action": "REGISTER", "asset": "—", "amount": "—",
-                    "status": "✅ Confirmed", "tx_hash": tx_display[:18] + "…",
+                    "status": "✅ Confirmed",
+                    "tx_hash": (tx_display[:18] + "…") if _is_tx_hash(tx_display) else "Already registered",
+                    "tx_hash_full": tx_display if _is_tx_hash(tx_display) else "",
                 })
-                st.success(f"Registered on-chain! TX: {tx_display[:28]}…")
+                if _is_tx_hash(tx_display):
+                    st.success(f"Registered on-chain! TX: {tx_display[:28]}…")
+                else:
+                    st.success("Agent already registered on-chain.")
             else:
                 err = reg_result.get("error", "Unknown error")
                 _cog("✗", f"Registration failed: {err}", "err")
@@ -2133,11 +2253,15 @@ with st.sidebar:
                 st.session_state.pop("_trust_cache", None)  # invalidate so Trust Panel refreshes
                 tx = "0x" + hashlib.sha256(
                     st.session_state["agent_name"].encode()).hexdigest()[:40]
+                # Preserve any previous valid on-chain tx hash
+                prev_tx = _normalize_tx_hash(st.session_state.get("last_reg_tx", ""))
+                st.session_state["last_reg_tx"] = prev_tx if _is_tx_hash(prev_tx) else None
                 _cog("▣", f"Demo TX: {tx[:20]}…", "sym")
                 st.session_state["tx_log"].append({
                     "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
                     "action": "REGISTER", "asset": "—", "amount": "—",
                     "status": "⚠️ Local", "tx_hash": tx[:18] + "…",
+                    "tx_hash_full": "",
                 })
                 st.warning(f"Chain unavailable — registered locally. Error: {err}")
         st.rerun()
@@ -2146,7 +2270,16 @@ with st.sidebar:
     if st.session_state["agent_registered"]:
         _explorer_base = "https://sepolia.etherscan.io"
         _wallet = st.session_state["agent_wallet"]
-        _reg_tx = st.session_state.get("last_reg_tx")
+        _reg_tx = _normalize_tx_hash(st.session_state.get("last_reg_tx"))
+        if not _is_tx_hash(_reg_tx):
+            # Recover from tx log if full hash exists there
+            for _txe in reversed(st.session_state.get("tx_log", [])):
+                _cand = _normalize_tx_hash(_txe.get("tx_hash_full") or _txe.get("tx_hash"))
+                if _is_tx_hash(_cand):
+                    _reg_tx = _cand
+                    st.session_state["last_reg_tx"] = _cand
+                    break
+        _reg_tx_valid = _is_tx_hash(_reg_tx)
         st.markdown(
             f'<div style="background:#050510;border:1px solid #1a1a3e;border-radius:10px;'
             f'padding:0.6rem 0.8rem;margin:0.4rem 0;font-size:0.68rem">'
@@ -2157,7 +2290,10 @@ with st.sidebar:
             f'📋 Agent Wallet ↗</a></div>'
             + (f'<div style="margin:2px 0"><a href="{_explorer_base}/tx/{_reg_tx}" '
                f'target="_blank" style="color:#4fc3f7;text-decoration:none">'
-               f'🧾 Registration TX ↗</a></div>' if _reg_tx else '')
+                    f'🧾 Registration TX ↗</a></div>' if _reg_tx_valid else
+                    f'<div style="margin:2px 0"><a href="{_explorer_base}/txs?a={_wallet}" '
+                    f'target="_blank" style="color:#4fc3f7;text-decoration:none">'
+                    f'🧾 Registration TX Search ↗</a></div>')
             + f'<div style="margin:2px 0"><a href="{_explorer_base}/address/'
               f'{getattr(config, "IDENTITY_REGISTRY_ADDRESS", "N/A") if config else "N/A"}" target="_blank" '
               f'style="color:#4fc3f7;text-decoration:none">'
@@ -2239,7 +2375,27 @@ with st.sidebar:
 
     # ── DEX Wallet ───────────────────────────────────────
     st.markdown("### 💱 DEX Wallet")
-    if _HAS_DEX and _DEX is not None:
+    _wallet_addr = str(st.session_state.get("agent_wallet", ""))
+    _native_eth = _fetch_native_eth_balance(_wallet_addr)
+    if _native_eth is not None:
+        st.session_state["wallet_eth"] = _native_eth
+
+    _dex_obj, _has_dex = _ensure_dex()
+    if _has_dex and _dex_obj is not None:
+        # UI runtime switch (not hardcoded to env)
+        if "_dex_toggle_init" not in st.session_state:
+            st.session_state["dex_enabled"] = bool(getattr(_dex_obj, "enabled", st.session_state.get("dex_enabled", False)))
+            st.session_state["_dex_toggle_init"] = True
+
+        _dex_toggle = st.toggle(
+            "DEX Executor Runtime",
+            value=bool(st.session_state.get("dex_enabled", False)),
+            key="dex_runtime_toggle",
+            help="Turns Uniswap execution ON/OFF live in this session without editing .env",
+        )
+        st.session_state["dex_enabled"] = bool(_dex_toggle)
+        _set_dex_enabled_runtime(bool(_dex_toggle))
+
         dex_on = st.session_state.get("dex_enabled", False)
         dex_icon = "🟢" if dex_on else "🔴"
         st.markdown(f"{dex_icon} **Uniswap V3** — {'Enabled' if dex_on else 'Disabled'}")
@@ -2247,18 +2403,22 @@ with st.sidebar:
         _dex_now = time.time()
         if _dex_now - st.session_state.get("_dex_bal_ts", 0) > 30:
             try:
-                _sb = _DEX.get_balances()
+                _sb = _dex_obj.get_balances()
                 st.session_state["wallet_eth"] = _sb.get("eth", 0.0)
                 st.session_state["wallet_weth"] = _sb.get("weth", 0.0)
                 st.session_state["wallet_usdc"] = _sb.get("usdc", 0.0)
                 st.session_state["_dex_bal_ts"] = _dex_now
             except Exception as e:
                 logger.warning("DEX balance refresh failed: %s", e)
+        _eth_price = _get_eth_usd_price_hint()
+        _eth_usd = st.session_state.get("wallet_eth", 0.0) * _eth_price
         st.markdown(
             f'<div class="mcard">'
             f'<div class="lbl">Wallet Balances</div>'
             f'<div style="font-size:0.75rem;color:#a78bfa;margin-top:4px">'
             f'Ξ {st.session_state.get("wallet_eth", 0):.6f} ETH</div>'
+            f'<div style="font-size:0.65rem;color:#8892b0;margin-top:2px">'
+            f'≈ ${_eth_usd:,.2f} @ ${_eth_price:,.0f}/ETH</div>'
             f'<div style="font-size:0.75rem;color:#60a5fa;margin-top:2px">'
             f'Ξ {st.session_state.get("wallet_weth", 0):.6f} WETH</div>'
             f'<div style="font-size:0.75rem;color:#34d399;margin-top:2px">'
@@ -2313,6 +2473,39 @@ st.markdown(
 )
 
 # ── Live System Health Heartbeat ──────────────────────
+@st.cache_data(ttl=120, show_spinner=False)
+def _bedrock_runtime_probe() -> tuple[str, int, str]:
+    """Return (status, latency_ms, detail) based on real Bedrock runtime call."""
+    _ak = os.getenv("AWS_ACCESS_KEY_ID", "").strip()
+    _sk = os.getenv("AWS_SECRET_ACCESS_KEY", "").strip()
+    if not (_ak and _sk) or _ak in ("your_aws_access_key", "your-access-key-id"):
+        return "FALLBACK", 0, "No credentials"
+
+    _t = time.perf_counter()
+    try:
+        import boto3 as _boto3_hc
+        _region = getattr(config, "AWS_DEFAULT_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1"))
+        _model = getattr(config, "BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
+        _client = _boto3_hc.client(
+            "bedrock-runtime",
+            region_name=_region,
+            aws_access_key_id=_ak,
+            aws_secret_access_key=_sk,
+        )
+        _client.converse(
+            modelId=_model,
+            messages=[{"role": "user", "content": [{"text": "health-check"}]}],
+            inferenceConfig={"maxTokens": 1, "temperature": 0.0},
+        )
+        return "READY", round((time.perf_counter() - _t) * 1000), "Runtime invoke OK"
+    except Exception as e:
+        _msg = str(e)
+        _ms = round((time.perf_counter() - _t) * 1000)
+        if "Operation not allowed" in _msg or "ValidationException" in _msg:
+            return "BLOCKED", _ms, "Runtime blocked"
+        return "FALLBACK", _ms, "Runtime unavailable"
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def _system_health_check():
     """Ping real subsystems and return status + latency."""
@@ -2359,19 +2552,16 @@ def _system_health_check():
     except Exception:
         checks["Sepolia RPC"] = ("⛓️", "OFF", 0)
 
-    # AWS Bedrock
-    _ak = os.getenv("AWS_ACCESS_KEY_ID", "").strip()
-    _sk = os.getenv("AWS_SECRET_ACCESS_KEY", "").strip()
-    _aws_ok = bool(_ak and _sk and _ak not in ("your_aws_access_key", "your-access-key-id")
-                   and _sk not in ("your_aws_secret_key", "your-secret-access-key"))
-    checks["AWS Bedrock"] = ("🧠", "READY" if _aws_ok else "FALLBACK", 0)
+    # AWS Bedrock (real runtime probe)
+    _b_status, _b_ms, _ = _bedrock_runtime_probe()
+    checks["AWS Bedrock"] = ("🧠", _b_status, _b_ms)
 
     return checks
 
 _hc = _system_health_check()
 _hc_html_parts = []
 for _hc_name, (_hc_icon, _hc_st, _hc_ms) in _hc.items():
-    _hc_color = "#64ffda" if _hc_st == "LIVE" or _hc_st == "READY" else "#ffd740" if _hc_st == "FALLBACK" else "#ff6b6b"
+    _hc_color = "#64ffda" if _hc_st in ("LIVE", "READY") else "#ffd740" if _hc_st == "FALLBACK" else "#ff6b6b"
     _hc_ms_str = f" · {_hc_ms}ms" if _hc_ms > 0 else ""
     _hc_html_parts.append(
         f'<span style="display:inline-block;padding:0.2rem 0.6rem;margin:0.1rem 0.25rem;'
@@ -2416,6 +2606,13 @@ if _rug_alert_data:
 pair = st.session_state["selected_pair"]
 if st.session_state["market_df"] is None:
     load_market_data(pair)
+    st.session_state["_last_market_refresh"] = time.time()
+elif st.session_state.get("market_live_refresh", False):
+    _m_now = time.time()
+    _m_int = max(10, int(st.session_state.get("market_refresh_sec", 15)))
+    if _m_now - float(st.session_state.get("_last_market_refresh", 0.0)) >= _m_int:
+        load_market_data(pair)
+        st.session_state["_last_market_refresh"] = _m_now
 df = st.session_state["market_df"]
 
 regime = detect_regime(df, st.session_state["whatif_vol_mult"])
@@ -2474,7 +2671,7 @@ st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 # ──────────────────────────────────────────────────────────
 
 with tab_market:
-    col_pair, col_ref = st.columns([3, 1])
+    col_pair, col_ref, col_live = st.columns([2.2, 0.9, 1.5])
     with col_pair:
         new_pair = st.selectbox(
             "Trading Pair", list(_BASE_PRICES.keys()),
@@ -2490,11 +2687,26 @@ with tab_market:
             except Exception:
                 pass
             load_market_data(new_pair)
+            st.session_state["_last_market_refresh"] = time.time()
             df = st.session_state["market_df"]
     with col_ref:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🔄 Refresh", width="stretch"):
             df = load_market_data(st.session_state["selected_pair"])
+            st.session_state["_last_market_refresh"] = time.time()
+    with col_live:
+        st.session_state["market_live_refresh"] = st.toggle(
+            "Live Price",
+            value=bool(st.session_state.get("market_live_refresh", False)),
+            key="market_live_toggle",
+            help="Auto-refresh market data and price cards in real-time.",
+        )
+        st.session_state["market_refresh_sec"] = st.select_slider(
+            "Refresh",
+            options=[10, 15, 30, 60],
+            value=int(st.session_state.get("market_refresh_sec", 15)),
+            key="market_refresh_slider",
+        )
 
     latest  = df["close"].iloc[-1]
     prev    = df["close"].iloc[-2]
@@ -3349,13 +3561,16 @@ with tab_trust:
     st.caption("Transparent status of each Nova service — live vs. fallback")
 
     _nova_services = []
-    _aws_ready = getattr(config, "AWS_READY", False) if config else False
+    _aws_status, _aws_ms, _aws_detail = _bedrock_runtime_probe()
+    _aws_ready = _aws_status == "READY"
     # Nova Lite (Brain)
     _nova_services.append({
         "name": "Nova Lite (Brain)",
         "icon": "🧠",
-        "status": "LIVE" if _aws_ready else "FALLBACK",
-        "detail": "Converse API + tool-use loop" if _aws_ready else "Rule-based RSI/SMA engine",
+        "status": "LIVE" if _aws_ready else ("BLOCKED" if _aws_status == "BLOCKED" else "FALLBACK"),
+        "detail": ("Converse API + tool-use loop"
+                   if _aws_ready else
+                   ("Bedrock runtime blocked (Operation not allowed)" if _aws_status == "BLOCKED" else "Rule-based RSI/SMA engine")),
         "model": getattr(config, "BEDROCK_MODEL_ID", "—") if config else "—",
     })
     # Nova Sonic / Voice
@@ -3363,7 +3578,7 @@ with tab_trust:
     _nova_services.append({
         "name": "Nova Voice / Sonic",
         "icon": "🎙️",
-        "status": "LITE+TTS" if _aws_ready else "TEXT-ONLY",
+        "status": "LITE+TTS" if _aws_ready else ("BLOCKED" if _aws_status == "BLOCKED" else "TEXT-ONLY"),
         "detail": _voice_status.get("mode", "Unknown"),
         "model": getattr(config, "NOVA_SONIC_MODEL_ID", "—") if config else "—",
     })
@@ -3410,17 +3625,19 @@ with tab_trust:
     st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 
     # ── Refresh trust data (cached — only fetch on click) ─
+    _trust_now = time.time()
+    _trust_ttl = 60
     if "_trust_cache" not in st.session_state:
+        st.session_state["_trust_cache_ts"] = 0.0
+
+    if ("_trust_cache" not in st.session_state
+            or (_trust_now - st.session_state.get("_trust_cache_ts", 0.0)) > _trust_ttl):
         st.session_state["_trust_cache"] = {
-            "identity": {"registered": st.session_state.get("agent_registered", False),
-                         "token_id": st.session_state.get("on_chain_token_id"),
-                         "error": None},
-            "reputation": {"score": st.session_state.get("reputation_score", 95),
-                           "count": st.session_state.get("on_chain_rep_count", 0),
-                           "error": None},
-            "validation": {"total": st.session_state.get("on_chain_val_count", 0),
-                           "approved": 0, "error": None},
+            "identity": _fetch_on_chain_identity(),
+            "reputation": _fetch_on_chain_reputation(),
+            "validation": _fetch_validation_summary(),
         }
+        st.session_state["_trust_cache_ts"] = _trust_now
     if st.button("🔄 Refresh Trust Data", key="refresh_trust"):
         _cog("▣", "Querying ERC-8004 registries…", "info")
         st.session_state["_trust_cache"] = {
@@ -3428,6 +3645,7 @@ with tab_trust:
             "reputation": _fetch_on_chain_reputation(),
             "validation": _fetch_validation_summary(),
         }
+        st.session_state["_trust_cache_ts"] = time.time()
         _cog("✓", "Trust data refreshed from chain", "ok")
 
     identity_data = st.session_state["_trust_cache"]["identity"]
@@ -3555,11 +3773,17 @@ with tab_trust:
 
     # ── DEX Wallet Balances ────────────────────────────
     st.markdown("#### 💰 DEX Wallet Balances")
-    if _HAS_DEX and _DEX is not None:
+    _wallet_addr = str(st.session_state.get("agent_wallet", ""))
+    _native_eth = _fetch_native_eth_balance(_wallet_addr)
+    if _native_eth is not None:
+        st.session_state["wallet_eth"] = _native_eth
+
+    _dex_obj, _has_dex = _ensure_dex()
+    if _has_dex and _dex_obj is not None:
         _dex_t = time.time()
         if _dex_t - st.session_state.get("_dex_bal_ts", 0) > 30:
             try:
-                _bal = _DEX.get_balances()
+                _bal = _dex_obj.get_balances()
                 st.session_state["wallet_eth"] = _bal.get("eth", 0.0)
                 st.session_state["wallet_weth"] = _bal.get("weth", 0.0)
                 st.session_state["wallet_usdc"] = _bal.get("usdc", 0.0)
@@ -3576,9 +3800,11 @@ with tab_trust:
         </div>""", unsafe_allow_html=True)
     with wc2:
         eth_bal = st.session_state.get("wallet_eth", 0.0)
+        eth_price = _get_eth_usd_price_hint()
         st.markdown(f"""<div class="mcard">
             <div class="lbl">ETH Balance</div>
             <div class="val" style="color:#a78bfa">{eth_bal:.6f}</div>
+            <div style="font-size:0.65rem;color:#8892b0">≈ ${eth_bal * eth_price:,.2f}</div>
         </div>""", unsafe_allow_html=True)
     with wc3:
         weth_bal = st.session_state.get("wallet_weth", 0.0)
@@ -4791,7 +5017,10 @@ if st.session_state.get("autonomous_mode") and not st.session_state.get("kill_sw
         st.rerun()
     else:
         import streamlit.components.v1 as _stc
+        _cadence = max(10, int(st.session_state.get("cog_refresh_sec", 15)))
+        _live_stream = bool(st.session_state.get("cog_stream_live", True))
+        _next_refresh_s = min(_remaining, _cadence) if _live_stream else _remaining
         _stc.html(
-            f'<script>setTimeout(function(){{window.parent.location.reload()}},{_remaining*1000})</script>',
+            f'<script>setTimeout(function(){{window.parent.location.reload()}},{max(1, _next_refresh_s)*1000})</script>',
             height=0,
         )
