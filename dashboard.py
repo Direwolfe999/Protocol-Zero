@@ -822,7 +822,11 @@ def _qp_get(name: str, default: str = "") -> str:
 _AUTO_QP = _qp_get("auto", "0").strip().lower() in {"1", "true", "yes", "on"}
 _PAIR_QP = _qp_get("pair", "ETH/USDT").strip().upper() or "ETH/USDT"
 _INTRO_QP = _qp_get("intro", "done").strip().lower()
-_INTRO_DONE = _INTRO_QP in {"done", "1", "true", "yes", "on"}
+# Hosted stability guard:
+# Intro rerun gates can occasionally leave users on a blank dark shell on some hosts.
+# Keep intro fully bypassed by default; allow explicit opt-in with ?intro=show&allow_intro=1.
+_ALLOW_INTRO_QP = _qp_get("allow_intro", "0").strip().lower() in {"1", "true", "yes", "on"}
+_INTRO_DONE = (not _ALLOW_INTRO_QP) or (_INTRO_QP in {"done", "1", "true", "yes", "on"})
 
 _DEFAULTS: dict[str, Any] = {
     "agent_name":       "ProtocolZero",
