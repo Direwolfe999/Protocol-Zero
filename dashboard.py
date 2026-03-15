@@ -39,6 +39,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import os, glob, pathlib
 from ui_components import build_health_badges_html, footer_html
+from session_store import restore_persisted_state, persist_state
 
 _CLOUD_SAFE_MODE = os.getenv("PZ_CLOUD_SAFE_MODE", "1").strip().lower() in {"1", "true", "yes", "on"}
 _ULTRA_LITE_MODE = os.getenv("PZ_ULTRA_LITE_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
@@ -1032,27 +1033,11 @@ _PERSIST_KEYS = [
 
 
 def _restore_persisted_state() -> None:
-    if not _SESSION_FILE.exists():
-        return
-    try:
-        raw = json.loads(_SESSION_FILE.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            return
-        for k in _PERSIST_KEYS:
-            if k in raw:
-                st.session_state[k] = raw[k]
-    except Exception as _e:
-        logger.debug("Session restore skipped: %s", _e)
+    restore_persisted_state(st.session_state, _SESSION_FILE, _PERSIST_KEYS, logger)
 
 
 def _persist_state() -> None:
-    try:
-        _SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-        payload = {k: st.session_state.get(k) for k in _PERSIST_KEYS}
-        _SESSION_FILE.write_text(json.dumps(payload, ensure_ascii=False, default=str),
-                                 encoding="utf-8")
-    except Exception as _e:
-        logger.debug("Session persist skipped: %s", _e)
+    persist_state(st.session_state, _SESSION_FILE, _PERSIST_KEYS, logger)
 
 
 if not st.session_state.get("_persist_restored", False):
