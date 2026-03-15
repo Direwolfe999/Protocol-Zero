@@ -2499,7 +2499,7 @@ def _bedrock_runtime_probe() -> tuple[str, int, str]:
     try:
         import boto3 as _boto3_hc
         _region = getattr(config, "AWS_DEFAULT_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1"))
-        _model = getattr(config, "BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
+        _model = getattr(config, "BEDROCK_MODEL_ID", "us.amazon.nova-lite-v1:0")
         _client = _boto3_hc.client(
             "bedrock-runtime",
             region_name=_region,

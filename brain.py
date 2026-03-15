@@ -513,10 +513,10 @@ def invoke_brain(
     # ── Bedrock Converse API (Nova Lite with Tool-Use) ─────────
     client = _get_bedrock_client()
 
-    model_id = getattr(config, "BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0") or "amazon.nova-lite-v1:0"
+    model_id = getattr(config, "BEDROCK_MODEL_ID", "us.amazon.nova-lite-v1:0") or "us.amazon.nova-lite-v1:0"
     if ":" not in model_id:
-        logger.warning("Invalid BEDROCK_MODEL_ID '%s' — falling back to amazon.nova-lite-v1:0", model_id)
-        model_id = "amazon.nova-lite-v1:0"
+        logger.warning("Invalid BEDROCK_MODEL_ID '%s' — falling back to us.amazon.nova-lite-v1:0", model_id)
+        model_id = "us.amazon.nova-lite-v1:0"
 
     messages = [
         {

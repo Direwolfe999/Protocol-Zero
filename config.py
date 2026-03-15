@@ -195,7 +195,7 @@ def _require_positive_float(key: str, default: str) -> float:
 AWS_ACCESS_KEY_ID      = _optional("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY  = _optional("AWS_SECRET_ACCESS_KEY")
 AWS_DEFAULT_REGION     = _optional("AWS_DEFAULT_REGION", "us-east-1")
-BEDROCK_MODEL_ID       = _optional("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
+BEDROCK_MODEL_ID       = _optional("BEDROCK_MODEL_ID", "us.amazon.nova-lite-v1:0")
 AWS_READY              = bool(
     AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
     and AWS_ACCESS_KEY_ID not in _PLACEHOLDER_VALUES
