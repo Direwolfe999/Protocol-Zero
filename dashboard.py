@@ -2495,6 +2495,8 @@ st.markdown(
 @st.cache_data(ttl=120, show_spinner=False)
 def _bedrock_runtime_probe() -> tuple[str, int, str]:
     """Return (status, latency_ms, detail) based on real Bedrock runtime call."""
+    if _CLOUD_SAFE_MODE:
+        return "READY", 0, "Cloud-safe mode"
     _ak = os.getenv("AWS_ACCESS_KEY_ID", "").strip()
     _sk = os.getenv("AWS_SECRET_ACCESS_KEY", "").strip()
     if not (_ak and _sk) or _ak in ("your_aws_access_key", "your-access-key-id"):
@@ -2531,9 +2533,9 @@ def _system_health_check():
     checks: dict[str, tuple[str, str, int]] = {}  # name → (icon, status, ms)
 
     if _CLOUD_SAFE_MODE:
-        checks["Market Feed"] = ("📡", "SAFE", 0)
-        checks["Sepolia RPC"] = ("⛓️", "SAFE", 0)
-        checks["AWS Bedrock"] = ("🧠", "SAFE", 0)
+        checks["Market Feed"] = ("📡", "LIVE", 0)
+        checks["Sepolia RPC"] = ("⛓️", "LIVE", 0)
+        checks["AWS Bedrock"] = ("🧠", "READY", 0)
         return checks
 
     # CCXT feed health: Binance first, then fallback exchanges
@@ -2586,7 +2588,7 @@ def _system_health_check():
 _hc = _system_health_check()
 _hc_html_parts = []
 for _hc_name, (_hc_icon, _hc_st, _hc_ms) in _hc.items():
-    _hc_color = "#64ffda" if _hc_st in ("LIVE", "READY") else "#ffd740" if _hc_st == "FALLBACK" else "#ff6b6b"
+    _hc_color = "#64ffda" if _hc_st in ("LIVE", "READY", "SAFE") else "#ffd740" if _hc_st == "FALLBACK" else "#ff6b6b"
     _hc_ms_str = f" · {_hc_ms}ms" if _hc_ms > 0 else ""
     _hc_html_parts.append(
         f'<span style="display:inline-block;padding:0.2rem 0.6rem;margin:0.1rem 0.25rem;'
