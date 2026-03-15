@@ -926,14 +926,15 @@ if _FORCE_DASHBOARD_MODE:
 
 # Keep URL in sync so a hard refresh keeps key session flags.
 try:
-    _qp_auto_now = _qp_get("auto", "")
-    _qp_pair_now = _qp_get("pair", "")
-    _target_auto = "1" if st.session_state.get("autonomous_mode") else "0"
-    _target_pair = str(st.session_state.get("selected_pair", "ETH/USDT"))
-    if _qp_auto_now != _target_auto:
-        st.query_params["auto"] = _target_auto
-    if _qp_pair_now != _target_pair:
-        st.query_params["pair"] = _target_pair
+    if not _CLOUD_SAFE_MODE:
+        _qp_auto_now = _qp_get("auto", "")
+        _qp_pair_now = _qp_get("pair", "")
+        _target_auto = "1" if st.session_state.get("autonomous_mode") else "0"
+        _target_pair = str(st.session_state.get("selected_pair", "ETH/USDT"))
+        if _qp_auto_now != _target_auto:
+            st.query_params["auto"] = _target_auto
+        if _qp_pair_now != _target_pair:
+            st.query_params["pair"] = _target_pair
 except Exception:
     pass
 
@@ -1006,8 +1007,9 @@ if not st.session_state.get("_persist_restored", False):
     _restore_persisted_state()
     st.session_state["_persist_restored"] = True
     try:
-        st.query_params["auto"] = "1" if st.session_state.get("autonomous_mode") else "0"
-        st.query_params["pair"] = str(st.session_state.get("selected_pair", "ETH/USDT"))
+        if not _CLOUD_SAFE_MODE:
+            st.query_params["auto"] = "1" if st.session_state.get("autonomous_mode") else "0"
+            st.query_params["pair"] = str(st.session_state.get("selected_pair", "ETH/USDT"))
     except Exception:
         pass
 
@@ -2154,9 +2156,10 @@ with st.sidebar:
                       key="auto_toggle")
     st.session_state["autonomous_mode"] = auto
     try:
-        _auto_qp = "1" if auto else "0"
-        if _qp_get("auto", "") != _auto_qp:
-            st.query_params["auto"] = _auto_qp
+        if not _CLOUD_SAFE_MODE:
+            _auto_qp = "1" if auto else "0"
+            if _qp_get("auto", "") != _auto_qp:
+                st.query_params["auto"] = _auto_qp
     except Exception:
         pass
 
@@ -2709,7 +2712,7 @@ with tab_market:
         if new_pair != st.session_state["selected_pair"]:
             st.session_state["selected_pair"] = new_pair
             try:
-                if _qp_get("pair", "") != new_pair:
+                if (not _CLOUD_SAFE_MODE) and _qp_get("pair", "") != new_pair:
                     st.query_params["pair"] = new_pair
             except Exception:
                 pass
