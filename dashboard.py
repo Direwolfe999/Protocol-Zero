@@ -39,6 +39,8 @@ import plotly.graph_objects as go
 import streamlit as st
 import os, glob, pathlib
 
+_CLOUD_SAFE_MODE = os.getenv("PZ_CLOUD_SAFE_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
+
 # ── Real Protocol Zero Modules (graceful fallback) ─────
 # Use @st.cache_resource so heavy constructors only run ONCE across reruns.
 
@@ -1709,6 +1711,10 @@ def _generate_synthetic_ohlcv(symbol: str, hours: int = 72) -> pd.DataFrame:
 
 @st.cache_data(ttl=120, show_spinner=False)
 def _try_fetch_live(symbol: str) -> pd.DataFrame | None:
+    # Hosted stability mode: skip remote exchange calls during boot/health checks.
+    # This prevents startup stalls that can trigger /script-health-check 503 timeouts.
+    if _CLOUD_SAFE_MODE:
+        return None
     try:
         import ccxt
         exchange_specs = [
@@ -2524,6 +2530,12 @@ def _bedrock_runtime_probe() -> tuple[str, int, str]:
 def _system_health_check():
     """Ping real subsystems and return status + latency."""
     checks: dict[str, tuple[str, str, int]] = {}  # name → (icon, status, ms)
+
+    if _CLOUD_SAFE_MODE:
+        checks["Market Feed"] = ("📡", "SAFE", 0)
+        checks["Sepolia RPC"] = ("⛓️", "SAFE", 0)
+        checks["AWS Bedrock"] = ("🧠", "SAFE", 0)
+        return checks
 
     # CCXT feed health: Binance first, then fallback exchanges
     _t = time.perf_counter()
