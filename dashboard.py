@@ -1361,6 +1361,13 @@ if (not _FORCE_DASHBOARD_MODE) and st.session_state.get("_intro_transition_activ
 
 def _fetch_on_chain_identity() -> dict:
     """Pull live identity data from ERC-8004 Identity Registry."""
+    if _CLOUD_SAFE_MODE:
+        _tok = st.session_state.get("on_chain_token_id")
+        return {
+            "registered": bool(st.session_state.get("agent_registered", False)),
+            "token_id": _tok,
+            "error": None,
+        }
     chain_obj, has_chain = _ensure_chain()
     if not has_chain or chain_obj is None:
         return {"registered": False, "token_id": None, "error": "Chain not available"}
@@ -1377,6 +1384,12 @@ def _fetch_on_chain_identity() -> dict:
 
 def _fetch_on_chain_reputation() -> dict:
     """Pull live reputation from ERC-8004 Reputation Registry."""
+    if _CLOUD_SAFE_MODE:
+        return {
+            "score": st.session_state.get("reputation_score", 95),
+            "count": int(st.session_state.get("on_chain_rep_count", 0) or 0),
+            "error": None,
+        }
     chain_obj, has_chain = _ensure_chain()
     if not has_chain or chain_obj is None:
         return {"score": None, "count": 0, "error": "Chain not available"}
@@ -1397,6 +1410,9 @@ def _fetch_on_chain_reputation() -> dict:
 
 def _fetch_validation_summary() -> dict:
     """Pull live validation stats from ERC-8004 Validation Registry."""
+    if _CLOUD_SAFE_MODE:
+        _total = int(st.session_state.get("on_chain_val_count", 0) or 0)
+        return {"total": _total, "approved": _total, "error": None}
     chain_obj, has_chain = _ensure_chain()
     if not has_chain or chain_obj is None:
         return {"total": 0, "approved": 0, "error": "Chain not available"}
@@ -1456,6 +1472,8 @@ def _is_tx_hash(value: str) -> bool:
 @st.cache_data(ttl=20, show_spinner=False)
 def _fetch_native_eth_balance(wallet_address: str) -> float | None:
     """Read native ETH balance directly from chain (works even if DEX module is off)."""
+    if _CLOUD_SAFE_MODE:
+        return float(st.session_state.get("wallet_eth", 0.0) or 0.0)
     if not wallet_address:
         return None
     chain_obj, has_chain = _ensure_chain()
@@ -1488,6 +1506,10 @@ def _get_eth_usd_price_hint() -> float:
 
 def _real_register_agent() -> dict:
     """Register agent on-chain via Identity Registry."""
+    if _CLOUD_SAFE_MODE:
+        _seed = f"{st.session_state.get('agent_name','ProtocolZero')}-{time.time()}"
+        _tx = "0x" + hashlib.sha256(_seed.encode()).hexdigest()
+        return {"success": True, "tx": _tx, "error": None}
     chain_obj, has_chain = _ensure_chain()
     if not has_chain or chain_obj is None:
         return {"success": False, "tx": None, "error": "Chain not available"}
@@ -1503,6 +1525,16 @@ def _real_register_agent() -> dict:
 
 def _real_execute_trade(decision: dict, df: pd.DataFrame) -> dict:
     """Execute trade through the real pipeline: risk_check → sign_trade → chain."""
+    if _CLOUD_SAFE_MODE:
+        _seed = f"auto-safe-{decision.get('action','HOLD')}-{time.time()}"
+        return {
+            "success": True,
+            "tx": "0x" + hashlib.sha256((_seed + "-tx").encode()).hexdigest(),
+            "sig": "0x" + hashlib.sha256((_seed + "-sig").encode()).hexdigest(),
+            "pnl": 0.0,
+            "risk_report": "Cloud-safe demo mode: execution simulated",
+            "error": None,
+        }
     result = {"success": False, "tx": None, "sig": None, "pnl": 0.0,
               "risk_report": "", "error": None}
     _timings: dict[str, float] = {}  # pipeline waterfall (ms)
@@ -2214,7 +2246,7 @@ with st.sidebar:
                                                       value=st.session_state["agent_wallet"])
 
     # Try to pull real reputation from chain (cached — refresh every 60s)
-    if _HAS_CHAIN and st.session_state["agent_registered"]:
+    if (not _CLOUD_SAFE_MODE) and _HAS_CHAIN and st.session_state["agent_registered"]:
         _rep_now = time.time()
         if _rep_now - st.session_state.get("_rep_cache_ts", 0) > 60:
             rep_data = _fetch_on_chain_reputation()
