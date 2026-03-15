@@ -821,6 +821,8 @@ def _qp_get(name: str, default: str = "") -> str:
 
 _AUTO_QP = _qp_get("auto", "0").strip().lower() in {"1", "true", "yes", "on"}
 _PAIR_QP = _qp_get("pair", "ETH/USDT").strip().upper() or "ETH/USDT"
+_INTRO_QP = _qp_get("intro", "done").strip().lower()
+_INTRO_DONE = _INTRO_QP in {"done", "1", "true", "yes", "on"}
 
 _DEFAULTS: dict[str, Any] = {
     "agent_name":       "ProtocolZero",
@@ -899,7 +901,8 @@ _DEFAULTS: dict[str, Any] = {
     "nova_embed_results":  [],   # history of embedding analyses
 
     # ── Intro / Onboarding ────────────────────────────
-    "intro_completed":     "intro" in st.query_params and st.query_params["intro"] == "done",
+    # Default to dashboard for live stability; set ?intro=show to force intro.
+    "intro_completed":     _INTRO_DONE,
     "intro_slide":         0,
     "_intro_transition_active": False,
 }
@@ -2264,7 +2267,7 @@ with st.sidebar:
                     "tx_hash_full": "",
                 })
                 st.warning(f"Chain unavailable — registered locally. Error: {err}")
-        st.rerun()
+            # Avoid forced rerun here (can trigger blank-screen transitions on some hosts).
 
     # ── On-Chain Proof Links ──────────────────────────────
     if st.session_state["agent_registered"]:
