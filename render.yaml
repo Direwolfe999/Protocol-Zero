@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: protocol-zero
+    env: docker
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /
+    envVars:
+      - key: PZ_CLOUD_SAFE_MODE
+        value: "1"
+      - key: PZ_FORCE_DASHBOARD_MODE
+        value: "1"
+      - key: DEX_ENABLED
+        value: "false"
