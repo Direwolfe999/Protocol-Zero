@@ -4937,7 +4937,11 @@ class _SkipCycle(Exception):
     """Sentinel: duplicate autonomous decision — skip logging."""
     pass
 
-if st.session_state.get("autonomous_mode") and not st.session_state.get("kill_switch_active"):
+if _CLOUD_SAFE_MODE and st.session_state.get("autonomous_mode") and not st.session_state.get("kill_switch_active"):
+    st.caption("⚡ Autonomous mode is ON. Cloud-safe launch mode pauses automatic trade loops to keep hosting stable.")
+    st.caption("Use **AI Brain → Run Analysis** for manual cycles during live demo.")
+
+if (not _CLOUD_SAFE_MODE) and st.session_state.get("autonomous_mode") and not st.session_state.get("kill_switch_active"):
     _auto_interval = 90  # seconds between autonomous cycles (budget-friendly)
     _last_auto = st.session_state.get("_last_auto_run", 0)
     _now_ts = time.time()
