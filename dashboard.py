@@ -827,6 +827,7 @@ _INTRO_QP = _qp_get("intro", "done").strip().lower()
 # Keep intro fully bypassed by default; allow explicit opt-in with ?intro=show&allow_intro=1.
 _ALLOW_INTRO_QP = _qp_get("allow_intro", "0").strip().lower() in {"1", "true", "yes", "on"}
 _INTRO_DONE = (not _ALLOW_INTRO_QP) or (_INTRO_QP in {"done", "1", "true", "yes", "on"})
+_FORCE_DASHBOARD_MODE = True
 
 _DEFAULTS: dict[str, Any] = {
     "agent_name":       "ProtocolZero",
@@ -914,6 +915,12 @@ _DEFAULTS: dict[str, Any] = {
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
+
+# Emergency live-stability mode:
+# never allow intro gating or intro transition reruns during hosted operation.
+if _FORCE_DASHBOARD_MODE:
+    st.session_state["intro_completed"] = True
+    st.session_state["_intro_transition_active"] = False
 
 # Keep URL in sync so a hard refresh keeps key session flags.
 try:
@@ -1320,7 +1327,7 @@ if not st.session_state["intro_completed"]:
     st.stop()
 
 # One-time transition loader only when exiting intro.
-if st.session_state.get("_intro_transition_active", False):
+if (not _FORCE_DASHBOARD_MODE) and st.session_state.get("_intro_transition_active", False):
     st.markdown("""
     <style>
     .pz-intro-loader-wrap{min-height:58vh;display:flex;align-items:center;justify-content:center}
