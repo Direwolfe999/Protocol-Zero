@@ -40,6 +40,7 @@ import streamlit as st
 import os, glob, pathlib
 
 _CLOUD_SAFE_MODE = os.getenv("PZ_CLOUD_SAFE_MODE", "1").strip().lower() in {"1", "true", "yes", "on"}
+_ULTRA_LITE_MODE = os.getenv("PZ_ULTRA_LITE_MODE", "1").strip().lower() in {"1", "true", "yes", "on"}
 
 # ── Real Protocol Zero Modules (graceful fallback) ─────
 # Use @st.cache_resource so heavy constructors only run ONCE across reruns.
@@ -2695,6 +2696,32 @@ if _rug_alert_data:
         <div style="color:#ff9999;font-size:0.8rem;margin-top:4px">
             {_alert_items}</div>
     </div>""", unsafe_allow_html=True)
+
+
+# ── Ultra-lite hosted mode (emergency stability path) ──────
+if _CLOUD_SAFE_MODE and _ULTRA_LITE_MODE:
+    st.markdown("### 🚀 Protocol Zero · Stable Demo Mode")
+    st.caption("Hosted-safe mode is active to prevent websocket disconnects on free infrastructure.")
+
+    _c1, _c2, _c3, _c4 = st.columns(4)
+    with _c1:
+        st.metric("Mode", "AUTONOMOUS" if st.session_state.get("autonomous_mode") else "MANUAL")
+    with _c2:
+        st.metric("Registered", "YES" if st.session_state.get("agent_registered") else "NO")
+    with _c3:
+        st.metric("Trades", int(st.session_state.get("trade_count", 0)))
+    with _c4:
+        st.metric("PnL", f"${float(st.session_state.get('session_pnl', 0.0)):+.2f}")
+
+    st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
+    st.info("Use sidebar controls for Autonomous toggle and Register action."
+            " This compact view keeps the app stable during judging/submission.")
+
+    st.markdown("#### Recent Cognitive Log")
+    st.markdown(_render_cognitive_stream(), unsafe_allow_html=True)
+
+    _persist_state()
+    st.stop()
 
 
 # ════════════════════════════════════════════════════════════
