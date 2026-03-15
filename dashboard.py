@@ -42,6 +42,17 @@ import os, glob, pathlib
 _CLOUD_SAFE_MODE = os.getenv("PZ_CLOUD_SAFE_MODE", "1").strip().lower() in {"1", "true", "yes", "on"}
 _ULTRA_LITE_MODE = os.getenv("PZ_ULTRA_LITE_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
 
+# Hosted hardening: explicit st.rerun() calls can create reboot/blank loops
+# on constrained free hosts. In cloud-safe mode, rely on normal Streamlit
+# widget reruns and disable manual rerun triggers.
+if _CLOUD_SAFE_MODE:
+    def _nohost_rerun(*args, **kwargs):
+        return None
+    try:
+        st.rerun = _nohost_rerun  # type: ignore[assignment]
+    except Exception:
+        pass
+
 # ── Real Protocol Zero Modules (graceful fallback) ─────
 # Use @st.cache_resource so heavy constructors only run ONCE across reruns.
 
