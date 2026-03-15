@@ -39,7 +39,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import os, glob, pathlib
 
-_CLOUD_SAFE_MODE = os.getenv("PZ_CLOUD_SAFE_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
+_CLOUD_SAFE_MODE = os.getenv("PZ_CLOUD_SAFE_MODE", "1").strip().lower() in {"1", "true", "yes", "on"}
 
 # ── Real Protocol Zero Modules (graceful fallback) ─────
 # Use @st.cache_resource so heavy constructors only run ONCE across reruns.
