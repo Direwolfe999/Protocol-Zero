@@ -1324,9 +1324,8 @@ render();
 
 
 # ── Gate: Show intro OR dashboard ─────────────────────────
-if not st.session_state["intro_completed"]:
+if (not _FORCE_DASHBOARD_MODE) and (not st.session_state["intro_completed"]):
     _render_intro_screen()
-    st.stop()
 
 # One-time transition loader only when exiting intro.
 if (not _FORCE_DASHBOARD_MODE) and st.session_state.get("_intro_transition_active", False):
