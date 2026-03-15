@@ -827,7 +827,7 @@ _INTRO_QP = _qp_get("intro", "done").strip().lower()
 # Keep intro fully bypassed by default; allow explicit opt-in with ?intro=show&allow_intro=1.
 _ALLOW_INTRO_QP = _qp_get("allow_intro", "0").strip().lower() in {"1", "true", "yes", "on"}
 _INTRO_DONE = (not _ALLOW_INTRO_QP) or (_INTRO_QP in {"done", "1", "true", "yes", "on"})
-_FORCE_DASHBOARD_MODE = True
+_FORCE_DASHBOARD_MODE = os.getenv("PZ_FORCE_DASHBOARD_MODE", "1").strip().lower() in {"1", "true", "yes", "on"}
 
 _DEFAULTS: dict[str, Any] = {
     "agent_name":       "ProtocolZero",
