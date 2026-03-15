@@ -38,6 +38,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 import os, glob, pathlib
+from ui_components import build_health_badges_html, footer_html
 
 _CLOUD_SAFE_MODE = os.getenv("PZ_CLOUD_SAFE_MODE", "1").strip().lower() in {"1", "true", "yes", "on"}
 _ULTRA_LITE_MODE = os.getenv("PZ_ULTRA_LITE_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
@@ -2658,20 +2659,7 @@ def _system_health_check():
     return checks
 
 _hc = _system_health_check()
-_hc_html_parts = []
-for _hc_name, (_hc_icon, _hc_st, _hc_ms) in _hc.items():
-    _hc_color = "#64ffda" if _hc_st in ("LIVE", "READY", "SAFE") else "#ffd740" if _hc_st == "FALLBACK" else "#ff6b6b"
-    _hc_ms_str = f" · {_hc_ms}ms" if _hc_ms > 0 else ""
-    _hc_html_parts.append(
-        f'<span style="display:inline-block;padding:0.2rem 0.6rem;margin:0.1rem 0.25rem;'
-        f'border:1px solid {_hc_color}33;border-radius:6px;font-size:0.7rem;color:{_hc_color}">'
-        f'{_hc_icon} {_hc_name}: <b>{_hc_st}</b>{_hc_ms_str}</span>'
-    )
-st.markdown(
-    '<div style="display:flex;flex-wrap:wrap;justify-content:center;margin:-0.3rem 0 0.5rem">'
-    + "".join(_hc_html_parts) + '</div>',
-    unsafe_allow_html=True,
-)
+st.markdown(build_health_badges_html(_hc), unsafe_allow_html=True)
 
 # ── Kill Switch Banner ───────────────────────────────
 if st.session_state["kill_switch_active"]:
@@ -5012,17 +5000,7 @@ with tab_multimodal:
 # ════════════════════════════════════════════════════════════
 
 st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
-st.markdown("""
-<div style="text-align:center;color:#3a3a5c;font-size:clamp(0.45rem,1.2vw,0.7rem);
-            padding:0.5rem;word-break:break-word;line-height:1.6">
-    Protocol Zero v1.0 &nbsp;·&nbsp; Autonomous Agent &nbsp;·&nbsp;
-    ERC-8004 Compliant &nbsp;·&nbsp; EIP-712 Signed Intents &nbsp;·&nbsp;
-    Nova Lite (Bedrock) &nbsp;·&nbsp; Nova Act &nbsp;·&nbsp;
-    Nova Sonic &nbsp;·&nbsp; Nova Embeddings &nbsp;·&nbsp;
-    On-Chain Trust &nbsp;·&nbsp;
-    Validation Artifacts &nbsp;·&nbsp; Hackathon 2025/2026
-</div>
-""", unsafe_allow_html=True)
+st.markdown(footer_html(), unsafe_allow_html=True)
 
 # Save key session values at end of each run so hard refresh can restore them.
 _persist_state()
