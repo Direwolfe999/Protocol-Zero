@@ -759,38 +759,56 @@ pre, code, .stCodeBlock, .stCode,
 
 # ── JS: block right-click & common copy shortcuts ────────
 # Allows Ctrl-C inside whitelisted elements (inputs, code, etc.)
+if not _CLOUD_SAFE_MODE:
+    st.markdown("""
+    <script>
+    (function(){
+      /* Tags / selectors where copying is allowed */
+      const ALLOW = ['INPUT','TEXTAREA','PRE','CODE'];
+      function isAllowed(el){
+          if(!el) return false;
+          if(ALLOW.includes(el.tagName)) return true;
+          if(el.isContentEditable) return true;
+          if(el.closest('pre,code,.stCodeBlock,.stCode,.stDataFrame,.stTable,[data-testid="stJson"],.cog-stream')) return true;
+          return false;
+      }
+
+      /* Block right-click everywhere except whitelisted */
+      document.addEventListener('contextmenu', function(e){
+          if(!isAllowed(e.target)) e.preventDefault();
+      }, true);
+
+      /* Block Ctrl+C / Ctrl+U / Ctrl+S outside whitelisted */
+      document.addEventListener('keydown', function(e){
+          if(e.ctrlKey || e.metaKey){
+              if(e.key==='u' || e.key==='s'){          /* view-source / save */
+                  e.preventDefault();
+              }
+              if(e.key==='c' && !isAllowed(document.activeElement)){
+                  var sel = window.getSelection();
+                  var anchor = sel && sel.anchorNode ? (sel.anchorNode.nodeType===3 ? sel.anchorNode.parentElement : sel.anchorNode) : null;
+                  if(!isAllowed(anchor)) e.preventDefault();
+              }
+          }
+      }, true);
+    })();
+    </script>
+    """, unsafe_allow_html=True)
+
+# Swallow known wallet-extension injection error that can disrupt hosted boot.
 st.markdown("""
 <script>
-(function(){
-  /* Tags / selectors where copying is allowed */
-  const ALLOW = ['INPUT','TEXTAREA','PRE','CODE'];
-  function isAllowed(el){
-      if(!el) return false;
-      if(ALLOW.includes(el.tagName)) return true;
-      if(el.isContentEditable) return true;
-      if(el.closest('pre,code,.stCodeBlock,.stCode,.stDataFrame,.stTable,[data-testid="stJson"],.cog-stream')) return true;
-      return false;
-  }
-
-  /* Block right-click everywhere except whitelisted */
-  document.addEventListener('contextmenu', function(e){
-      if(!isAllowed(e.target)) e.preventDefault();
-  }, true);
-
-  /* Block Ctrl+C / Ctrl+U / Ctrl+S outside whitelisted */
-  document.addEventListener('keydown', function(e){
-      if(e.ctrlKey || e.metaKey){
-          if(e.key==='u' || e.key==='s'){          /* view-source / save */
-              e.preventDefault();
-          }
-          if(e.key==='c' && !isAllowed(document.activeElement)){
-              var sel = window.getSelection();
-              var anchor = sel && sel.anchorNode ? (sel.anchorNode.nodeType===3 ? sel.anchorNode.parentElement : sel.anchorNode) : null;
-              if(!isAllowed(anchor)) e.preventDefault();
-          }
-      }
-  }, true);
-})();
+window.addEventListener('error', function (e) {
+  try {
+    const msg = String((e && e.message) || '');
+    if (msg.includes('Cannot redefine property: ethereum')) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}, true);
 </script>
 """, unsafe_allow_html=True)
 
