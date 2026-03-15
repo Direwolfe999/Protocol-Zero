@@ -5021,6 +5021,24 @@ if st.session_state.get("autonomous_mode") and not st.session_state.get("kill_sw
         _live_stream = bool(st.session_state.get("cog_stream_live", True))
         _next_refresh_s = min(_remaining, _cadence) if _live_stream else _remaining
         _stc.html(
-            f'<script>setTimeout(function(){{window.parent.location.reload()}},{max(1, _next_refresh_s)*1000})</script>',
+                        f'''
+                        <script>
+                        (function() {{
+                            const ms = {max(1, _next_refresh_s) * 1000};
+                            if (window.__pz_reload_timer) {{
+                                clearTimeout(window.__pz_reload_timer);
+                            }}
+                            window.__pz_reload_timer = setTimeout(function() {{
+                                try {{
+                                    if (!document.hidden) {{
+                                        window.location.reload();
+                                    }}
+                                }} catch (e) {{
+                                    window.location.reload();
+                                }}
+                            }}, ms);
+                        }})();
+                        </script>
+                        ''',
             height=0,
         )
