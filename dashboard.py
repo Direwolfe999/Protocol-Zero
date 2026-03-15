@@ -38,6 +38,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 import os, glob, pathlib
+from health_monitor import bedrock_runtime_probe, system_health_check
 from ui_components import build_health_badges_html, footer_html
 from session_store import restore_persisted_state, persist_state
 
@@ -2567,95 +2568,22 @@ st.markdown(
 @st.cache_data(ttl=120, show_spinner=False)
 def _bedrock_runtime_probe() -> tuple[str, int, str]:
     """Return (status, latency_ms, detail) based on real Bedrock runtime call."""
-    if _CLOUD_SAFE_MODE:
-        return "READY", 0, "Cloud-safe mode"
-    _ak = os.getenv("AWS_ACCESS_KEY_ID", "").strip()
-    _sk = os.getenv("AWS_SECRET_ACCESS_KEY", "").strip()
-    if not (_ak and _sk) or _ak in ("your_aws_access_key", "your-access-key-id"):
-        return "FALLBACK", 0, "No credentials"
-
-    _t = time.perf_counter()
-    try:
-        import boto3 as _boto3_hc
-        _region = getattr(config, "AWS_DEFAULT_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1"))
-        _model = getattr(config, "BEDROCK_MODEL_ID", "us.amazon.nova-lite-v1:0")
-        _client = _boto3_hc.client(
-            "bedrock-runtime",
-            region_name=_region,
-            aws_access_key_id=_ak,
-            aws_secret_access_key=_sk,
-        )
-        _client.converse(
-            modelId=_model,
-            messages=[{"role": "user", "content": [{"text": "health-check"}]}],
-            inferenceConfig={"maxTokens": 1, "temperature": 0.0},
-        )
-        return "READY", round((time.perf_counter() - _t) * 1000), "Runtime invoke OK"
-    except Exception as e:
-        _msg = str(e)
-        _ms = round((time.perf_counter() - _t) * 1000)
-        if "Operation not allowed" in _msg or "ValidationException" in _msg:
-            return "BLOCKED", _ms, "Runtime blocked"
-        return "FALLBACK", _ms, "Runtime unavailable"
+    return bedrock_runtime_probe(
+        cloud_safe_mode=_CLOUD_SAFE_MODE,
+        config_module=config,
+        aws_access_key=os.getenv("AWS_ACCESS_KEY_ID", ""),
+        aws_secret_key=os.getenv("AWS_SECRET_ACCESS_KEY", ""),
+    )
 
 
 @st.cache_data(ttl=60, show_spinner=False)
 def _system_health_check():
     """Ping real subsystems and return status + latency."""
-    checks: dict[str, tuple[str, str, int]] = {}  # name → (icon, status, ms)
-
-    if _CLOUD_SAFE_MODE:
-        checks["Market Feed"] = ("📡", "LIVE", 0)
-        checks["Sepolia RPC"] = ("⛓️", "LIVE", 0)
-        checks["AWS Bedrock"] = ("🧠", "READY", 0)
-        return checks
-
-    # CCXT feed health: Binance first, then fallback exchanges
-    _t = time.perf_counter()
-    try:
-        import ccxt as _ccxt_hc  # noqa: F811
-
-        _feed_name = "Binance Feed"
-        _feed_status = "OFF"
-        _feed_ms = 0
-
-        try:
-            _ccxt_hc.binance({"enableRateLimit": True, "timeout": 3000}).fetch_ticker("ETH/USDT")
-            _feed_status = "LIVE"
-            _feed_ms = round((time.perf_counter() - _t) * 1000)
-        except Exception:
-            for _ex_name in ("coinbase", "kraken", "bitfinex"):
-                try:
-                    _ex_cls = getattr(_ccxt_hc, _ex_name, None)
-                    if _ex_cls is None:
-                        continue
-                    _ex_cls({"enableRateLimit": True, "timeout": 3000}).fetch_ticker("ETH/USD")
-                    _feed_name = f"{_ex_name.capitalize()} Feed"
-                    _feed_status = "FALLBACK"
-                    _feed_ms = round((time.perf_counter() - _t) * 1000)
-                    break
-                except Exception:
-                    continue
-
-        checks[_feed_name] = ("📡", _feed_status, _feed_ms)
-    except Exception:
-        checks["Binance Feed"] = ("📡", "OFF", 0)
-
-    # Sepolia RPC
-    _t = time.perf_counter()
-    try:
-        from web3 import Web3 as _W3hc  # noqa: F811
-        _w3 = _W3hc(_W3hc.HTTPProvider(os.getenv("RPC_URL", ""), request_kwargs={"timeout": 4}))
-        _w3.eth.block_number
-        checks["Sepolia RPC"] = ("⛓️", "LIVE", round((time.perf_counter() - _t) * 1000))
-    except Exception:
-        checks["Sepolia RPC"] = ("⛓️", "OFF", 0)
-
-    # AWS Bedrock (real runtime probe)
-    _b_status, _b_ms, _ = _bedrock_runtime_probe()
-    checks["AWS Bedrock"] = ("🧠", _b_status, _b_ms)
-
-    return checks
+    return system_health_check(
+        cloud_safe_mode=_CLOUD_SAFE_MODE,
+        rpc_url=os.getenv("RPC_URL", ""),
+        bedrock_probe=_bedrock_runtime_probe,
+    )
 
 _hc = _system_health_check()
 st.markdown(build_health_badges_html(_hc), unsafe_allow_html=True)

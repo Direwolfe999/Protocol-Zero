@@ -33,3 +33,4 @@ build/
 Thumbs.db
 .streamlit/secrets.toml
 artifacts/session_state.json
+backups/
