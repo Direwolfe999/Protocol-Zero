@@ -10,5 +10,9 @@ services:
         value: "1"
       - key: PZ_FORCE_DASHBOARD_MODE
         value: "1"
+      - key: PZ_ULTRA_LITE_MODE
+        value: "0"
+      - key: PZ_DISABLE_EXPLICIT_RERUN
+        value: "1"
       - key: DEX_ENABLED
         value: "false"

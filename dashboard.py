@@ -42,6 +42,20 @@ from ui_components import build_health_badges_html, footer_html
 
 _CLOUD_SAFE_MODE = os.getenv("PZ_CLOUD_SAFE_MODE", "1").strip().lower() in {"1", "true", "yes", "on"}
 _ULTRA_LITE_MODE = os.getenv("PZ_ULTRA_LITE_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
+_DISABLE_EXPLICIT_RERUN = os.getenv("PZ_DISABLE_EXPLICIT_RERUN", "1").strip().lower() in {"1", "true", "yes", "on"}
+
+# Hosted stability hardening:
+# Widget interactions already trigger a rerun automatically. Extra explicit
+# st.rerun() calls can create rapid double-rerun loops that drop websocket
+# sessions on constrained free hosts.
+if _CLOUD_SAFE_MODE and _DISABLE_EXPLICIT_RERUN:
+    def _host_safe_noop_rerun(*_args, **_kwargs):
+        return None
+
+    try:
+        st.rerun = _host_safe_noop_rerun  # type: ignore[assignment]
+    except Exception:
+        pass
 
 # ── Real Protocol Zero Modules (graceful fallback) ─────
 # Use @st.cache_resource so heavy constructors only run ONCE across reruns.
