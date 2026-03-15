@@ -77,7 +77,7 @@ def _init_perf():
     except Exception:
         return None, False
 
-if _CLOUD_SAFE_MODE:
+if _ULTRA_LITE_MODE:
     _PERF, _HAS_PERF = None, False
 else:
     _PERF, _HAS_PERF = _init_perf()
@@ -90,7 +90,7 @@ def _init_artifacts():
     except Exception:
         return None, False
 
-if _CLOUD_SAFE_MODE:
+if _ULTRA_LITE_MODE:
     _ARTIFACTS, _HAS_ARTIFACTS = None, False
 else:
     _ARTIFACTS, _HAS_ARTIFACTS = _init_artifacts()
@@ -103,7 +103,7 @@ def _init_risk():
     except Exception:
         return None, False
 
-if _CLOUD_SAFE_MODE:
+if _ULTRA_LITE_MODE:
     _RISK_STATE, _HAS_RISK = None, False
 else:
     _RISK_STATE, _HAS_RISK = _init_risk()
@@ -159,7 +159,7 @@ def _init_nova_act():
     except Exception:
         return None, False
 
-if _CLOUD_SAFE_MODE:
+if _ULTRA_LITE_MODE:
     _NOVA_ACT, _HAS_NOVA_ACT = None, False
 else:
     _NOVA_ACT, _HAS_NOVA_ACT = _init_nova_act()
@@ -172,7 +172,7 @@ def _init_nova_sonic():
     except Exception:
         return None, False
 
-if _CLOUD_SAFE_MODE:
+if _ULTRA_LITE_MODE:
     _NOVA_SONIC, _HAS_NOVA_SONIC = None, False
 else:
     _NOVA_SONIC, _HAS_NOVA_SONIC = _init_nova_sonic()
@@ -185,7 +185,7 @@ def _init_nova_embed():
     except Exception:
         return None, False
 
-if _CLOUD_SAFE_MODE:
+if _ULTRA_LITE_MODE:
     _NOVA_EMBED, _HAS_NOVA_EMBED = None, False
 else:
     _NOVA_EMBED, _HAS_NOVA_EMBED = _init_nova_embed()
