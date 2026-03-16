@@ -40,25 +40,40 @@ st.set_page_config(
 	page_title="Protocol Zero · Autonomous Agent",
 	page_icon="🛡️",
 	layout="wide",
-	initial_sidebar_state="expanded",
+	initial_sidebar_state="collapsed",
 )
 
+# === GLOBAL STYLE ===
+st.markdown("""
+<style>
+.st-emotion-cache-1p-yk96 { max-width: 100%; padding: 1rem; }
+[data-testid="stSidebarNav"] { display: none !important; }
+.stApp > header { background-color: transparent !important; }
+div[data-testid="stVerticalBlock"] > div:nth-of-type(n+1) { margin-bottom: 0.5rem; }
+</style>
+""", unsafe_allow_html=True)
+
+# Force intro on first app load
+if not st.session_state.get("_app_initialized", False):
+	st.session_state["_app_initialized"] = True
+	st.session_state["_intro_completed"] = False
+
 pages = [
-	st.Page("pages/00_Dashboard.py", title="Dashboard", icon="🛡️"),
-	st.Page("pages/01_Market.py", title="Market", icon="📊"),
-	st.Page("pages/02_AI_Brain.py", title="AI Brain", icon="🧠"),
-	st.Page("pages/03_Risk_Execution.py", title="Risk & Exec", icon="🛡️"),
-	st.Page("pages/04_Trust_Panel.py", title="Trust Panel", icon="🌐"),
-	st.Page("pages/05_Performance.py", title="Performance", icon="📈"),
-	st.Page("pages/06_Audit_Trail.py", title="Audit Trail", icon="🔗"),
-	st.Page("pages/07_Calibration.py", title="Calibration", icon="🎯"),
-	st.Page("pages/08_Microstructure.py", title="Microstructure", icon="📡"),
-	st.Page("pages/09_TX_Log.py", title="TX Log", icon="📒"),
-	st.Page("pages/10_PnL.py", title="P&L", icon="💹"),
-	st.Page("pages/11_History.py", title="History", icon="🕘"),
-	st.Page("pages/12_Nova_Act_Audit.py", title="Nova Act Audit", icon="🔍"),
-	st.Page("pages/13_Voice_AI.py", title="Voice AI", icon="🎙️"),
-	st.Page("pages/14_Multimodal.py", title="Multimodal", icon="🖼️"),
+	st.Page("pages/00_Dashboard.py", title="🛡️ Dashboard", icon="🛡️"),
+	st.Page("pages/01_Market.py", title="📊 Market", icon="📊"),
+	st.Page("pages/02_AI_Brain.py", title="🧠 AI Brain", icon="🧠"),
+	st.Page("pages/03_Risk_Execution.py", title="⚡ Risk & Exec", icon="⚡"),
+	st.Page("pages/04_Trust_Panel.py", title="🌐 Trust Panel", icon="🌐"),
+	st.Page("pages/05_Performance.py", title="📈 Performance", icon="📈"),
+	st.Page("pages/06_Audit_Trail.py", title="🔗 Audit Trail", icon="🔗"),
+	st.Page("pages/07_Calibration.py", title="🎯 Calibration", icon="🎯"),
+	st.Page("pages/08_Microstructure.py", title="📡 Microstructure", icon="📡"),
+	st.Page("pages/09_TX_Log.py", title="📒 TX Log", icon="📒"),
+	st.Page("pages/10_PnL.py", title="💹 P&L", icon="💹"),
+	st.Page("pages/11_History.py", title="🕘 History", icon="🕘"),
+	st.Page("pages/12_Nova_Act_Audit.py", title="🔍 Nova Audit", icon="🔍"),
+	st.Page("pages/13_Voice_AI.py", title="🎙️ Voice AI", icon="🎙️"),
+	st.Page("pages/14_Multimodal.py", title="🖼️ Multimodal", icon="🖼️"),
 ]
 
 pg = st.navigation(pages)
