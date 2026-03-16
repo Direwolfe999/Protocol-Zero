@@ -475,6 +475,30 @@ else:
 	st.markdown("""
 	<script>
 	(function() {
+		// Add ARIA labels and accessibility attributes
+		const ariaMap = {
+			'Execute Voice Command': 'Submit voice command to Nova Sonic (Alt+Enter)',
+			'Status': 'Check portfolio status (Alt+S)',
+			'Kill': 'Emergency stop - halt all trading (Alt+K)',
+			'Risk': 'Query current risk assessment (Alt+R)',
+			'Balance': 'Show wallet balance',
+			'Regime': 'Identify current market regime'
+		};
+		
+		// Apply accessibility attributes to buttons
+		document.querySelectorAll('button').forEach(btn => {
+			const text = btn.innerText.trim();
+			for (const [label, ariaLabel] of Object.entries(ariaMap)) {
+				if (text.includes(label)) {
+					btn.setAttribute('aria-label', ariaLabel);
+					btn.setAttribute('role', 'button');
+					btn.setAttribute('tabindex', '0');
+					break;
+				}
+			}
+		});
+		
+		// Handle keyboard shortcuts
 		document.addEventListener('keydown', function(e) {
 			// Only trigger if not in text input
 			if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -593,6 +617,43 @@ else:
 	st.markdown("</div></div>", unsafe_allow_html=True)
 
 sonic_status = sonic.status() if flags.get("has_nova_sonic") and sonic is not None else {"mode": "offline"}
+
+# Accessibility settings
+col_acc_1, col_acc_2 = st.columns([1, 1])
+with col_acc_1:
+	high_contrast = st.checkbox("🎨 High Contrast Mode", value=st.session_state.get("_voice_high_contrast", False), key="_voice_hc_toggle")
+	st.session_state["_voice_high_contrast"] = high_contrast
+with col_acc_2:
+	captions = st.checkbox("📝 Enable Captions", value=st.session_state.get("_voice_captions", False), key="_voice_captions_toggle")
+	st.session_state["_voice_captions"] = captions
+
+# Apply high contrast CSS if enabled
+if high_contrast:
+	st.markdown("""
+	<style>
+	.voice-exec-btn { 
+		background: linear-gradient(135deg, #00ffff 0%, #00ffff 100%) !important;
+		color: #000000 !important;
+		border: 3px solid #000000 !important;
+		font-weight: 900 !important;
+		box-shadow: 0 0 30px #00ffff !important;
+	}
+	.voice-quick-btn {
+		background: #000000 !important;
+		border: 2px solid #ffff00 !important;
+		color: #ffff00 !important;
+	}
+	.voice-quick-btn[data-voice-tone="kill"] {
+		background: #000000 !important;
+		border: 3px solid #ff0000 !important;
+		color: #ff0000 !important;
+	}
+	.voice-waveform-container { background: #ffffff10 !important; border: 2px solid #ffffff !important; }
+	.voice-bar { background: #ffff00 !important; box-shadow: 0 0 15px #ffff00 !important; }
+	.voice-thinking { background: #00000080 !important; border: 2px solid #00ff00 !important; color: #00ff00 !important; }
+	.voice-thinking-dot { background: #00ff00 !important; }
+	</style>
+	""", unsafe_allow_html=True)
 
 # Display keyboard shortcuts
 st.markdown("""
