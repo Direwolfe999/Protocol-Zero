@@ -2764,7 +2764,9 @@ st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 #  TABS
 # ════════════════════════════════════════════════════════════
 
-_PANELS = [
+(tab_market, tab_brain, tab_risk, tab_trust, tab_perf,
+ tab_audit, tab_calib, tab_micro, tab_log, tab_pnl, tab_history,
+ tab_nova_act, tab_voice, tab_multimodal) = st.tabs([
     "📊  Market",
     "🧠  AI Brain",
     "🛡️  Risk & Exec",
@@ -2779,28 +2781,14 @@ _PANELS = [
     "🔍  Nova Act Audit",
     "🎙️  Voice AI",
     "🖼️  Multimodal",
-]
-
-if _FORCE_ACTIVE_PANEL in _PANELS:
-    _active_panel = _FORCE_ACTIVE_PANEL
-elif _SINGLE_PANEL_MODE:
-    st.caption("Stability mode: rendering one panel at a time to prevent websocket drops.")
-    _active_panel = st.radio(
-        "Panel",
-        options=_PANELS,
-        key="active_panel",
-        horizontal=True,
-        label_visibility="collapsed",
-    )
-else:
-    _active_panel = "ALL"
+])
 
 
 # ──────────────────────────────────────────────────────────
 #  TAB 1 — Market Data
 # ──────────────────────────────────────────────────────────
 
-if _active_panel in ("ALL", "📊  Market"):
+with tab_market:
     col_pair, col_ref, col_live = st.columns([2.2, 0.9, 1.5])
     with col_pair:
         new_pair = st.selectbox(
@@ -2904,7 +2892,7 @@ if _active_panel in ("ALL", "📊  Market"):
 #  TAB 2 — AI Analysis
 # ──────────────────────────────────────────────────────────
 
-if _active_panel in ("ALL", "🧠  AI Brain"):
+with tab_brain:
     st.markdown("### 🧠 AI Trading Analysis")
     st.caption("Strategic reasoning engine · Nova Lite on Bedrock")
 
@@ -3071,7 +3059,7 @@ if _active_panel in ("ALL", "🧠  AI Brain"):
 #  TAB 3 — Risk & Execution
 # ──────────────────────────────────────────────────────────
 
-if _active_panel in ("ALL", "🛡️  Risk & Exec"):
+with tab_risk:
     render_risk_execution_panel(
         df=df,
         run_analysis=run_analysis,
@@ -3091,7 +3079,7 @@ if _active_panel in ("ALL", "🛡️  Risk & Exec"):
 #  TAB 4 — Transaction Log
 # ──────────────────────────────────────────────────────────
 
-if _active_panel in ("ALL", "📒  TX Log"):
+with tab_log:
     st.markdown("### 📒 Transaction & Intent Log")
 
     if st.session_state["tx_log"]:
@@ -3150,7 +3138,7 @@ if _active_panel in ("ALL", "📒  TX Log"):
 #  TAB 5 — P&L Tracker
 # ──────────────────────────────────────────────────────────
 
-if _active_panel in ("ALL", "📈  P&L"):
+with tab_pnl:
     st.markdown("### 📈 Profit & Loss Tracker")
     st.caption("Cumulative P&L across all executed trades this session.")
 
@@ -3218,7 +3206,7 @@ if _active_panel in ("ALL", "📈  P&L"):
 #  TAB 6 — AI Decision History Feed
 # ──────────────────────────────────────────────────────────
 
-if _active_panel in ("ALL", "🔍  History"):
+with tab_history:
     st.markdown("### 🔍 AI Decision History")
     st.caption("Full feed of AI decisions with profitability annotations.")
 
@@ -3292,7 +3280,7 @@ if _active_panel in ("ALL", "🔍  History"):
 #  TAB 4 — 🌐 ERC-8004 Live Trust Panel
 # ──────────────────────────────────────────────────────────
 
-if _active_panel in ("ALL", "🌐  Trust Panel"):
+with tab_trust:
     st.markdown("### 🌐 ERC-8004 On-Chain Trust Panel")
     st.caption("Live trust data from Identity, Reputation, and Validation Registries on Sepolia")
 
@@ -3618,7 +3606,7 @@ if _active_panel in ("ALL", "🌐  Trust Panel"):
 #  TAB 5 — 📊 Institutional Performance Analytics
 # ──────────────────────────────────────────────────────────
 
-if _active_panel in ("ALL", "📊  Performance"):
+with tab_perf:
     st.markdown("### 📊 Institutional Performance Analytics")
     st.caption("Sharpe · Sortino · Calmar · Max Drawdown · Equity Curve — Real-time from PerformanceTracker")
 
@@ -3753,7 +3741,7 @@ if _active_panel in ("ALL", "📊  Performance"):
 #  TAB 6 — 🔗 Cryptographic Audit Trail
 # ──────────────────────────────────────────────────────────
 
-if _active_panel in ("ALL", "🔗  Audit Trail"):
+with tab_audit:
     st.markdown("### 🔗 Cryptographic Audit Trail")
     st.caption("Every trade decision sealed with keccak256 hashes — verifiable, immutable, trustless")
 
@@ -3842,7 +3830,7 @@ if _active_panel in ("ALL", "🔗  Audit Trail"):
 #  TAB 7 — 🧠 AI Confidence Calibration
 # ──────────────────────────────────────────────────────────
 
-if _active_panel in ("ALL", "🧠  Calibration"):
+with tab_calib:
     st.markdown("### 🧠 AI Confidence Calibration")
     st.caption("Is the agent's confidence well-calibrated? Predicted confidence vs actual win rate.")
 
@@ -3963,7 +3951,7 @@ if _active_panel in ("ALL", "🧠  Calibration"):
 #  TAB 8 — 📡 Live Market Microstructure
 # ──────────────────────────────────────────────────────────
 
-if _active_panel in ("ALL", "📡  Microstructure"):
+with tab_micro:
     st.markdown("### 📡 Live Market Microstructure")
     st.caption("Volatility regimes · Volume profile · Regime transitions — real-time from market data")
 
@@ -4116,7 +4104,7 @@ if _active_panel in ("ALL", "📡  Microstructure"):
 #  TAB 12 — 🔍 Nova Act Auditor
 # ──────────────────────────────────────────────────────────
 
-if _active_panel in ("ALL", "🔍  Nova Act Audit"):
+with tab_nova_act:
     st.markdown("### 🔍 Nova Act — Smart Contract Auditor")
     st.caption("Browser-based automated contract & token auditing via Amazon Nova Act")
 
@@ -4269,7 +4257,7 @@ if _active_panel in ("ALL", "🔍  Nova Act Audit"):
 #  TAB 13 — 🎙️ Voice AI War Room
 # ──────────────────────────────────────────────────────────
 
-if _active_panel in ("ALL", "🎙️  Voice AI"):
+with tab_voice:
     st.markdown("### 🎙️ Nova Sonic — Voice AI War Room")
     st.caption("Natural language voice commands & AI-generated alerts via Amazon Nova Sonic")
 
@@ -4442,7 +4430,7 @@ if _active_panel in ("ALL", "🎙️  Voice AI"):
 #  TAB 14 — 🖼️ Multimodal Embeddings
 # ──────────────────────────────────────────────────────────
 
-if _active_panel in ("ALL", "🖼️  Multimodal"):
+with tab_multimodal:
     st.markdown("### 🖼️ Nova Embeddings — Multimodal Scam Detection")
     st.caption("Analyze text, images, logos & charts for scam patterns using Amazon Nova Multimodal Embeddings")
 

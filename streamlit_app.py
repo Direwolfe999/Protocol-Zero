@@ -8,7 +8,6 @@ Real secrets (if configured) still take precedence.
 from __future__ import annotations
 
 import os
-import streamlit as st
 
 
 def _set_default_env(key: str, value: str) -> None:
@@ -33,33 +32,4 @@ _set_default_env("VALIDATION_REGISTRY_ADDRESS", "0x00000000000000000000000000000
 _set_default_env("CHAIN_ID", "11155111")
 _set_default_env("DEX_ENABLED", "false")
 
-# Dashboard module should not call page config when loaded via st.navigation.
-os.environ["PZ_SKIP_PAGE_CONFIG"] = "1"
-
-st.set_page_config(
-	page_title="Protocol Zero · Autonomous Agent",
-	page_icon="🛡️",
-	layout="wide",
-	initial_sidebar_state="expanded",
-)
-
-pages = [
-	st.Page("pages/00_Dashboard.py", title="Dashboard", icon="🛡️"),
-	st.Page("pages/01_Market.py", title="Market", icon="📊"),
-	st.Page("pages/02_AI_Brain.py", title="AI Brain", icon="🧠"),
-	st.Page("pages/03_Risk_Execution.py", title="Risk & Exec", icon="🛡️"),
-	st.Page("pages/04_Trust_Panel.py", title="Trust Panel", icon="🌐"),
-	st.Page("pages/05_Performance.py", title="Performance", icon="📈"),
-	st.Page("pages/06_Audit_Trail.py", title="Audit Trail", icon="🔗"),
-	st.Page("pages/07_Calibration.py", title="Calibration", icon="🎯"),
-	st.Page("pages/08_Microstructure.py", title="Microstructure", icon="📡"),
-	st.Page("pages/09_TX_Log.py", title="TX Log", icon="📒"),
-	st.Page("pages/10_PnL.py", title="P&L", icon="💹"),
-	st.Page("pages/11_History.py", title="History", icon="🕘"),
-	st.Page("pages/12_Nova_Act_Audit.py", title="Nova Act Audit", icon="🔍"),
-	st.Page("pages/13_Voice_AI.py", title="Voice AI", icon="🎙️"),
-	st.Page("pages/14_Multimodal.py", title="Multimodal", icon="🖼️"),
-]
-
-pg = st.navigation(pages)
-pg.run()
+import dashboard  # noqa: E402,F401
