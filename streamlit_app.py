@@ -53,21 +53,14 @@ div[data-testid="stVerticalBlock"] > div:nth-of-type(n+1) { margin-bottom: 0.5re
 </style>
 """, unsafe_allow_html=True)
 
-# Force intro on first app load
+# Initialize session state
 if not st.session_state.get("_app_initialized", False):
 	st.session_state["_app_initialized"] = True
 	st.session_state["_intro_completed"] = False
 
-# Check for intro_done param
-if st.query_params.get("intro_done") == "1":
-	st.session_state["_intro_completed"] = True
-
-# Show intro if not completed
+# If intro not completed, show it and stop
 if not st.session_state.get("_intro_completed", False):
-	import app_core as core
-	core.render_intro_screen()
-	st.session_state["_intro_completed"] = True
-	st.stop()
+	st.switch_page("pages/_00_Intro.py")
 
 pages = [
 	st.Page("pages/00_Dashboard.py", title="🛡️ Dashboard", icon="🛡️"),

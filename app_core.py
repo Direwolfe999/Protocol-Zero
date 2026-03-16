@@ -1665,9 +1665,12 @@ function render(){{
 }}
 function go(d){{cur=Math.max(0,Math.min(total-1,cur+d));render();}}
 function launch(){{
-  const url = new URL(window.location);
-  url.searchParams.set('intro_done', '1');
-  window.location.href = url.toString();
+  // Click the hidden Streamlit button to navigate
+  const btn = document.querySelector('[key="go_dashboard"]');
+  if (btn) btn.click();
+  else window.location.href = window.location.pathname;
+
+
 }}
 render();
 </script></body></html>"""
