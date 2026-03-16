@@ -8,6 +8,9 @@ import streamlit as st
 
 import app_core as core
 
+# === PAGE CONFIGURATION (MUST BE FIRST) ===
+st.set_page_config(page_title="Protocol Zero · Dashboard", layout="wide", initial_sidebar_state="collapsed")
+
 # Force intro for all non-skipped direct page access
 if not st.session_state.get("_intro_completed", False):
     skip_intro = st.query_params.get("skip_intro") == "true"
@@ -16,9 +19,6 @@ if not st.session_state.get("_intro_completed", False):
         st.session_state["_intro_completed"] = True
         st.stop()
     st.session_state["_intro_completed"] = True
-
-# === PAGE CONFIGURATION ===
-st.set_page_config(page_title="Protocol Zero · Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
 # === CUSTOM CSS ===
 st.markdown("""

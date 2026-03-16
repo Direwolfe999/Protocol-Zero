@@ -1,7 +1,7 @@
 [theme]
-primaryColor = "#3ec9ad"
-backgroundColor = "#060612"
-secondaryBackgroundColor = "#0c0c1f"
+primaryColor = "#64ffda"
+backgroundColor = "#0a0a1a"
+secondaryBackgroundColor = "#0f0f2e"
 textColor = "#ccd6f6"
 font = "sans serif"
 
@@ -9,6 +9,7 @@ font = "sans serif"
 backgroundColor = "#0a0a1a"
 secondaryBackgroundColor = "#111126"
 textColor = "#c7d2fe"
+primaryColor = "#64ffda"
 
 [server]
 headless = true
@@ -16,6 +17,13 @@ enableCORS = false
 enableXsrfProtection = false
 maxUploadSize = 10
 maxMessageSize = 500
+runOnSave = true
 
 [browser]
 gatherUsageStats = false
+
+[client]
+showErrorDetails = false
+
+[logger]
+level = "error"
