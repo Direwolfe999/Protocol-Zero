@@ -2846,9 +2846,7 @@ st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 #  TABS
 # ════════════════════════════════════════════════════════════
 
-(tab_market, tab_brain, tab_risk, tab_trust, tab_perf,
- tab_audit, tab_calib, tab_micro, tab_log, tab_pnl, tab_history,
- tab_nova_act, tab_voice, tab_multimodal) = st.tabs([
+_PANELS = [
     "📊  Market",
     "🧠  AI Brain",
     "🛡️  Risk & Exec",
@@ -2863,14 +2861,40 @@ st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
     "🔍  Nova Act Audit",
     "🎙️  Voice AI",
     "🖼️  Multimodal",
-])
+]
+
+if "active_panel" not in st.session_state:
+    st.session_state["active_panel"] = _PANELS[0]
+
+if _FORCE_ACTIVE_PANEL in _PANELS:
+    _active_panel = _FORCE_ACTIVE_PANEL
+    st.session_state["active_panel"] = _FORCE_ACTIVE_PANEL
+else:
+    _seg = getattr(st, "segmented_control", None)
+    if callable(_seg):
+        _active_panel = _seg(
+            "Panels",
+            options=_PANELS,
+            key="active_panel",
+            label_visibility="collapsed",
+        )
+    else:
+        _active_panel = st.radio(
+            "Panels",
+            options=_PANELS,
+            key="active_panel",
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+    if not _active_panel:
+        _active_panel = st.session_state.get("active_panel", _PANELS[0])
 
 
 # ──────────────────────────────────────────────────────────
 #  TAB 1 — Market Data
 # ──────────────────────────────────────────────────────────
 
-with tab_market:
+if _active_panel == "📊  Market":
     col_pair, col_ref, col_live = st.columns([2.2, 0.9, 1.5])
     with col_pair:
         new_pair = st.selectbox(
@@ -2974,7 +2998,7 @@ with tab_market:
 #  TAB 2 — AI Analysis
 # ──────────────────────────────────────────────────────────
 
-with tab_brain:
+if _active_panel == "🧠  AI Brain":
     st.markdown("### 🧠 AI Trading Analysis")
     st.caption("Strategic reasoning engine · Nova Lite on Bedrock")
 
@@ -3141,7 +3165,7 @@ with tab_brain:
 #  TAB 3 — Risk & Execution
 # ──────────────────────────────────────────────────────────
 
-with tab_risk:
+if _active_panel == "🛡️  Risk & Exec":
     render_risk_execution_panel(
         df=df,
         run_analysis=run_analysis,
@@ -3161,7 +3185,7 @@ with tab_risk:
 #  TAB 4 — Transaction Log
 # ──────────────────────────────────────────────────────────
 
-with tab_log:
+if _active_panel == "📒  TX Log":
     st.markdown("### 📒 Transaction & Intent Log")
 
     if st.session_state["tx_log"]:
@@ -3213,7 +3237,7 @@ with tab_log:
 #  TAB 5 — P&L Tracker
 # ──────────────────────────────────────────────────────────
 
-with tab_pnl:
+if _active_panel == "📈  P&L":
     st.markdown("### 📈 Profit & Loss Tracker")
     st.caption("Cumulative P&L across all executed trades this session.")
 
@@ -3281,7 +3305,7 @@ with tab_pnl:
 #  TAB 6 — AI Decision History Feed
 # ──────────────────────────────────────────────────────────
 
-with tab_history:
+if _active_panel == "🔍  History":
     st.markdown("### 🔍 AI Decision History")
     st.caption("Full feed of AI decisions with profitability annotations.")
 
@@ -3355,7 +3379,7 @@ with tab_history:
 #  TAB 4 — 🌐 ERC-8004 Live Trust Panel
 # ──────────────────────────────────────────────────────────
 
-with tab_trust:
+if _active_panel == "🌐  Trust Panel":
     st.markdown("### 🌐 ERC-8004 On-Chain Trust Panel")
     st.caption("Live trust data from Identity, Reputation, and Validation Registries on Sepolia")
 
@@ -3842,7 +3866,7 @@ def _render_multimodal_actions_fragment(
 #  TAB 5 — 📊 Institutional Performance Analytics
 # ──────────────────────────────────────────────────────────
 
-with tab_perf:
+if _active_panel == "📊  Performance":
     st.markdown("### 📊 Institutional Performance Analytics")
     st.caption("Sharpe · Sortino · Calmar · Max Drawdown · Equity Curve — Real-time from PerformanceTracker")
 
@@ -3976,7 +4000,7 @@ with tab_perf:
 #  TAB 6 — 🔗 Cryptographic Audit Trail
 # ──────────────────────────────────────────────────────────
 
-with tab_audit:
+if _active_panel == "🔗  Audit Trail":
     st.markdown("### 🔗 Cryptographic Audit Trail")
     st.caption("Every trade decision sealed with keccak256 hashes — verifiable, immutable, trustless")
 
@@ -4065,7 +4089,7 @@ with tab_audit:
 #  TAB 7 — 🧠 AI Confidence Calibration
 # ──────────────────────────────────────────────────────────
 
-with tab_calib:
+if _active_panel == "🧠  Calibration":
     st.markdown("### 🧠 AI Confidence Calibration")
     st.caption("Is the agent's confidence well-calibrated? Predicted confidence vs actual win rate.")
 
@@ -4186,7 +4210,7 @@ with tab_calib:
 #  TAB 8 — 📡 Live Market Microstructure
 # ──────────────────────────────────────────────────────────
 
-with tab_micro:
+if _active_panel == "📡  Microstructure":
     st.markdown("### 📡 Live Market Microstructure")
     st.caption("Volatility regimes · Volume profile · Regime transitions — real-time from market data")
 
@@ -4339,7 +4363,7 @@ with tab_micro:
 #  TAB 12 — 🔍 Nova Act Auditor
 # ──────────────────────────────────────────────────────────
 
-with tab_nova_act:
+if _active_panel == "🔍  Nova Act Audit":
     st.markdown("### 🔍 Nova Act — Smart Contract Auditor")
     st.caption("Browser-based automated contract & token auditing via Amazon Nova Act")
 
@@ -4467,7 +4491,7 @@ with tab_nova_act:
 #  TAB 13 — 🎙️ Voice AI War Room
 # ──────────────────────────────────────────────────────────
 
-with tab_voice:
+if _active_panel == "🎙️  Voice AI":
     st.markdown("### 🎙️ Nova Sonic — Voice AI War Room")
     st.caption("Natural language voice commands & AI-generated alerts via Amazon Nova Sonic")
 
@@ -4588,7 +4612,7 @@ with tab_voice:
 #  TAB 14 — 🖼️ Multimodal Embeddings
 # ──────────────────────────────────────────────────────────
 
-with tab_multimodal:
+if _active_panel == "🖼️  Multimodal":
     st.markdown("### 🖼️ Nova Embeddings — Multimodal Scam Detection")
     st.caption("Analyze text, images, logos & charts for scam patterns using Amazon Nova Multimodal Embeddings")
 
