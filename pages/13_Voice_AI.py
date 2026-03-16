@@ -470,6 +470,55 @@ else:
 		""",
 		unsafe_allow_html=True,
 	)
+	
+	# Add keyboard shortcuts listener
+	st.markdown("""
+	<script>
+	(function() {
+		document.addEventListener('keydown', function(e) {
+			// Only trigger if not in text input
+			if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+			
+			if (e.altKey && !e.ctrlKey && !e.metaKey) {
+				const key = e.key.toLowerCase();
+				let action = null;
+				
+				if (key === 'v') {
+					// Alt+V: Push-to-Talk
+					action = 'ptt_rec';
+				} else if (key === 'k') {
+					// Alt+K: Kill Switch
+					action = 'q_kill';
+				} else if (key === 's') {
+					// Alt+S: Status
+					action = 'q_status';
+				} else if (key === 'r') {
+					// Alt+R: Risk
+					action = 'q_risk';
+				}
+				
+				if (action) {
+					e.preventDefault();
+					const btn = document.querySelector(`[data-testid*="stButton"][data-test-key="${action}"], button[data-key="${action}"]`);
+					if (btn) {
+						btn.click();
+					} else {
+						// Try to find by text content
+						const allBtn = Array.from(document.querySelectorAll('button'));
+						let target = null;
+						if (action === 'q_kill') target = allBtn.find(b => b.innerText.includes('Kill'));
+						else if (action === 'q_status') target = allBtn.find(b => b.innerText.includes('Status'));
+						else if (action === 'q_risk') target = allBtn.find(b => b.innerText.includes('Risk'));
+						
+						if (target) target.click();
+					}
+				}
+			}
+		});
+	})();
+	</script>
+	""", unsafe_allow_html=True)
+	
 	st.markdown("</div>", unsafe_allow_html=True)
 
 	conf = float(st.session_state["voice_session"].get("last_confidence", 0.5))
@@ -544,6 +593,20 @@ else:
 	st.markdown("</div></div>", unsafe_allow_html=True)
 
 sonic_status = sonic.status() if flags.get("has_nova_sonic") and sonic is not None else {"mode": "offline"}
+
+# Display keyboard shortcuts
+st.markdown("""
+<div style="background:linear-gradient(135deg,rgba(79,195,247,.05),rgba(100,255,218,.02));border:1px solid rgba(100,255,218,.2);border-radius:12px;padding:1rem;margin:1rem 0">
+    <div style="font-weight:700;color:#64ffda;margin-bottom:0.8rem;font-size:0.9rem;text-transform:uppercase;letter-spacing:1px">⌨️ Keyboard Shortcuts</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;font-size:0.82rem;color:#9eeeff">
+        <div><kbd style="background:#111130;border:1px solid #1a1a3e;padding:0.3rem 0.6rem;border-radius:4px;font-family:monospace;color:#64ffda">Alt+V</kbd> Push-to-Talk</div>
+        <div><kbd style="background:#111130;border:1px solid #1a1a3e;padding:0.3rem 0.6rem;border-radius:4px;font-family:monospace;color:#ff6b6b">Alt+K</kbd> Kill Switch</div>
+        <div><kbd style="background:#111130;border:1px solid #1a1a3e;padding:0.3rem 0.6rem;border-radius:4px;font-family:monospace;color:#64ffda">Alt+S</kbd> Status Check</div>
+        <div><kbd style="background:#111130;border:1px solid #1a1a3e;padding:0.3rem 0.6rem;border-radius:4px;font-family:monospace;color:#ffd93d">Alt+R</kbd> Risk Report</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
 st.caption(
 	f"Module: **Nova Sonic** · Mode: **{sonic_status.get('mode', 'unknown')}** · Voice Session Persisted: **Yes** · Commands: **{len(st.session_state.get('nova_voice_history', []))}**"
 )
