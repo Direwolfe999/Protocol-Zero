@@ -342,6 +342,69 @@ def inject_theme() -> None:
 .badge-green { background: rgba(100,255,218,.15); color:#64ffda; }
 .badge-red { background: rgba(255,107,107,.15); color:#ff6b6b; }
 .badge-gold { background: rgba(255,217,61,.12); color:#ffd93d; }
+
+/* Hide Streamlit default sidebar page nav; use custom top tab-strip instead */
+[data-testid="stSidebarNav"] { display: none !important; }
+
+/* Tab-strip look for segmented control */
+[data-testid="stSegmentedControl"] [role="radiogroup"] {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    gap: 0 !important;
+    border-bottom: 1px solid #1a1a3e !important;
+    padding-bottom: 2px !important;
+}
+[data-testid="stSegmentedControl"] [role="radio"] {
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: #b7c6f2 !important;
+    box-shadow: none !important;
+    white-space: nowrap !important;
+    padding: .42rem .65rem !important;
+    margin: 0 !important;
+}
+[data-testid="stSegmentedControl"] [role="radio"]:hover {
+    color: #e6eeff !important;
+    border-bottom-color: rgba(79,195,247,.55) !important;
+}
+[data-testid="stSegmentedControl"] [role="radio"][aria-checked="true"] {
+    color: #ffffff !important;
+    border-bottom: 3px solid #64ffda !important;
+    font-weight: 700 !important;
+}
+
+/* Fallback when segmented control is unavailable and radio is used */
+[data-testid="stRadio"] [role="radiogroup"] {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    gap: 0 !important;
+    border-bottom: 1px solid #1a1a3e !important;
+    padding-bottom: 2px !important;
+}
+[data-testid="stRadio"] [role="radio"] {
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: #b7c6f2 !important;
+    box-shadow: none !important;
+    white-space: nowrap !important;
+    padding: .42rem .65rem !important;
+    margin: 0 !important;
+}
+[data-testid="stRadio"] [role="radio"]:hover {
+    color: #e6eeff !important;
+    border-bottom-color: rgba(79,195,247,.55) !important;
+}
+[data-testid="stRadio"] [role="radio"][aria-checked="true"] {
+    color: #ffffff !important;
+    border-bottom: 3px solid #64ffda !important;
+    font-weight: 700 !important;
+}
 </style>
 """,
         unsafe_allow_html=True,
