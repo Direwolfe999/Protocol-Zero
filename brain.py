@@ -469,12 +469,7 @@ def _build_user_prompt(df: pd.DataFrame, symbol: str, max_trade: float) -> str:
 
 def _get_bedrock_client() -> Any:
     """Construct a boto3 Bedrock Runtime client."""
-    return boto3.client(
-        "bedrock-runtime",
-        region_name=config.AWS_DEFAULT_REGION,
-        aws_access_key_id=config.AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=config.AWS_SECRET_ACCESS_KEY,
-    )
+    return boto3.client("bedrock-runtime", **config.bedrock_boto3_kwargs())
 
 
 def invoke_brain(

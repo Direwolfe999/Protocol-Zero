@@ -192,15 +192,31 @@ def _require_positive_float(key: str, default: str) -> float:
 #  Made optional so the dashboard can run without AWS while you
 #  finish account verification.  brain.py will fall back to
 #  rule-based logic when credentials are missing.
-AWS_ACCESS_KEY_ID      = _optional("AWS_ACCESS_KEY_ID")
+BEDROCK_LONG_TERM_API_KEY = _optional("BEDROCK_LONG_TERM_API_KEY")
+AWS_ACCESS_KEY_ID      = _optional("AWS_ACCESS_KEY_ID") or BEDROCK_LONG_TERM_API_KEY
 AWS_SECRET_ACCESS_KEY  = _optional("AWS_SECRET_ACCESS_KEY")
 AWS_DEFAULT_REGION     = _optional("AWS_DEFAULT_REGION", "us-east-1")
 BEDROCK_MODEL_ID       = _optional("BEDROCK_MODEL_ID", "us.amazon.nova-lite-v1:0")
+AWS_KEY_FALLBACK_ACTIVE = bool(not _optional("AWS_ACCESS_KEY_ID") and BEDROCK_LONG_TERM_API_KEY)
 AWS_READY              = bool(
     AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
     and AWS_ACCESS_KEY_ID not in _PLACEHOLDER_VALUES
     and AWS_SECRET_ACCESS_KEY not in _PLACEHOLDER_VALUES
 )
+
+# Optional Bedrock OpenAI-compatible runtime endpoint (for stream=True usage)
+BEDROCK_OPENAI_BASE_URL = _optional("BEDROCK_OPENAI_BASE_URL")
+BEDROCK_OPENAI_MODEL_ID = _optional("BEDROCK_OPENAI_MODEL_ID", BEDROCK_MODEL_ID)
+
+
+def bedrock_boto3_kwargs() -> dict:
+    """Return boto3 client kwargs with best-effort credential fallback."""
+    kwargs: dict = {"region_name": AWS_DEFAULT_REGION}
+    if AWS_ACCESS_KEY_ID:
+        kwargs["aws_access_key_id"] = AWS_ACCESS_KEY_ID
+    if AWS_SECRET_ACCESS_KEY:
+        kwargs["aws_secret_access_key"] = AWS_SECRET_ACCESS_KEY
+    return kwargs
 
 # ── Blockchain ──────────────────────────────────────────────
 RPC_URL     = _require("RPC_URL")

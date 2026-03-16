@@ -28,7 +28,7 @@ import struct
 import time
 from datetime import datetime, timezone
 from dataclasses import dataclass, asdict
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 import boto3
 
@@ -110,12 +110,7 @@ class NovaSonicVoice:
 
         if self.enabled:
             try:
-                self._client = boto3.client(
-                    "bedrock-runtime",
-                    region_name=config.AWS_DEFAULT_REGION,
-                    aws_access_key_id=config.AWS_ACCESS_KEY_ID,
-                    aws_secret_access_key=config.AWS_SECRET_ACCESS_KEY,
-                )
+                self._client = boto3.client("bedrock-runtime", **config.bedrock_boto3_kwargs())
                 logger.info("✅ Nova 2 Sonic voice engine initialized")
             except Exception as e:
                 logger.warning("Nova Sonic init failed: %s", e)
@@ -141,6 +136,87 @@ class NovaSonicVoice:
             return self._nova_sonic_respond(cmd, context or {})
         else:
             return self._text_fallback_respond(cmd, context or {})
+
+    def stream_voice_text(self, user_text: str, context: dict | None = None, max_tokens: int = 160) -> tuple[Iterator[str], dict[str, Any]]:
+        """
+        Stream response text tokens (OpenAI-compatible Bedrock endpoint when configured).
+        Falls back to non-streaming response split into words.
+        """
+        ctx = context or {}
+        cmd = self._parse_command(user_text)
+        prompt = self._build_response_prompt(cmd, ctx)
+        t0 = time.perf_counter()
+
+        base_url = getattr(config, "BEDROCK_OPENAI_BASE_URL", "")
+        model_id = getattr(config, "BEDROCK_OPENAI_MODEL_ID", "") or getattr(config, "BEDROCK_MODEL_ID", "us.amazon.nova-lite-v1:0")
+        api_key = getattr(config, "BEDROCK_LONG_TERM_API_KEY", "") or getattr(config, "AWS_ACCESS_KEY_ID", "")
+
+        if base_url and api_key:
+            try:
+                from openai import OpenAI  # type: ignore
+
+                client = OpenAI(base_url=base_url, api_key=api_key)
+                stream = client.chat.completions.create(
+                    model=model_id,
+                    messages=[
+                        {"role": "system", "content": self.SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt},
+                    ],
+                    max_tokens=max(32, int(max_tokens)),
+                    temperature=0.25,
+                    stream=True,
+                )
+
+                meta: dict[str, Any] = {
+                    "provider": "bedrock-openai",
+                    "region": getattr(config, "AWS_DEFAULT_REGION", "us-east-1"),
+                    "start_ts": datetime.now(timezone.utc).isoformat(),
+                    "latency_ms": 0,
+                }
+
+                def _gen() -> Iterator[str]:
+                    first = True
+                    count = 0
+                    for chunk in stream:
+                        try:
+                            delta = chunk.choices[0].delta.content or ""
+                        except Exception:
+                            delta = ""
+                        if not delta:
+                            continue
+                        if first:
+                            meta["latency_ms"] = round((time.perf_counter() - t0) * 1000)
+                            first = False
+                        count += len(delta.split())
+                        yield delta
+                    total_s = max(0.001, time.perf_counter() - t0)
+                    meta["tokens_per_sec"] = round(count / total_s, 2)
+                    meta["approx_tokens"] = count
+
+                return _gen(), meta
+            except Exception as e:
+                logger.warning("OpenAI-compatible streaming unavailable: %s", e)
+
+        # fallback path
+        resp = self.process_voice_text(user_text, context=ctx)
+        text = getattr(resp, "text", str(resp)) if hasattr(resp, "text") else str(resp)
+        words = text.split()
+        meta = {
+            "provider": "boto3-fallback",
+            "region": getattr(config, "AWS_DEFAULT_REGION", "us-east-1"),
+            "start_ts": datetime.now(timezone.utc).isoformat(),
+            "latency_ms": round((time.perf_counter() - t0) * 1000),
+            "tokens_per_sec": 0.0,
+            "approx_tokens": len(words),
+        }
+
+        def _fallback_gen() -> Iterator[str]:
+            for i, w in enumerate(words):
+                if i:
+                    yield " "
+                yield w
+
+        return _fallback_gen(), meta
 
     def generate_alert(self, alert_type: str, details: dict) -> VoiceResponse:
         """

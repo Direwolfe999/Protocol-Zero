@@ -16,6 +16,9 @@ plotly>=5.18.0         # Interactive charts (candlestick, volume)
 eth-account>=0.11.0    # EIP-712 structured signing
 eth-abi>=5.0.0         # ABI encoding helpers
 websockets>=12.0       # WebSocket support for real-time feeds
+openai>=1.40.0         # Bedrock OpenAI-compatible streaming client
+streamlit-mic-recorder>=0.0.8  # Browser mic capture (push-to-talk / VAD helper)
+# streamlit-webrtc>=0.47.0      # Optional advanced realtime audio pipeline
 
 # ── Optional: Amazon Nova Act (install separately if available) ──
 # nova-act is an invite-only SDK — install manually if you have access:

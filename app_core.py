@@ -8,8 +8,9 @@ import os
 import pathlib
 import re
 import time
+from functools import wraps
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
@@ -205,6 +206,84 @@ def module_flags() -> dict[str, Any]:
     }
 
 
+def log_diagnostic(level: str, message: str, details: dict[str, Any] | None = None) -> None:
+    if "system_diagnostics" not in st.session_state:
+        st.session_state["system_diagnostics"] = []
+    entry = {
+        "ts": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+        "level": level.upper(),
+        "message": message,
+        "details": details or {},
+    }
+    st.session_state["system_diagnostics"].append(entry)
+    if len(st.session_state["system_diagnostics"]) > 200:
+        st.session_state["system_diagnostics"] = st.session_state["system_diagnostics"][-200:]
+
+
+def protocol_zero_safe_run(
+    func: Callable[..., Any] | None = None,
+    *,
+    retries: int = 2,
+    fallback_value: Any = "ACCESS_DENIED_BY_ORG",
+    backup_bridge: Callable[..., Any] | None = None,
+) -> Callable[..., Any]:
+    def _decorate(inner: Callable[..., Any]) -> Callable[..., Any]:
+        @wraps(inner)
+        def _wrapped(*args: Any, **kwargs: Any) -> Any:
+            max_attempts = max(1, retries + 1)
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    return inner(*args, **kwargs)
+                except Exception as exc:
+                    msg = str(exc)
+                    lmsg = msg.lower()
+                    is_conn = any(k in lmsg for k in ["timeout", "connection", "websocket", "network"])
+                    is_bedrock = any(k in lmsg for k in ["operation not allowed", "validationexception", "bedrock", "access denied"])
+                    is_oom = isinstance(exc, MemoryError) or any(k in lmsg for k in ["out of memory", "oom", "overflow"])
+
+                    if "_bedrock_fail_count" not in st.session_state:
+                        st.session_state["_bedrock_fail_count"] = 0
+                    if is_bedrock:
+                        st.session_state["_bedrock_fail_count"] = int(st.session_state.get("_bedrock_fail_count", 0)) + 1
+
+                    log_diagnostic(
+                        "warn" if (is_conn or is_bedrock) else "error",
+                        "safe_run_exception",
+                        {"attempt": attempt, "error": msg, "connection": is_conn, "bedrock": is_bedrock},
+                    )
+
+                    if is_oom:
+                        try:
+                            gc.collect()
+                        except Exception:
+                            pass
+
+                    if is_conn and attempt < max_attempts:
+                        time.sleep(min(2.0, 0.35 * (2 ** (attempt - 1))))
+                        continue
+
+                    if is_bedrock and backup_bridge is not None and int(st.session_state.get("_bedrock_fail_count", 0)) >= 3:
+                        try:
+                            log_diagnostic("warn", "backup_bridge_activated", {"attempt": attempt, "bedrock_fail_count": st.session_state.get("_bedrock_fail_count", 0)})
+                            st.warning("⚠️ PROTOCOL ALERT: Tactical connection unstable. Switching to Backup Core.")
+                            return backup_bridge(*args, **kwargs)
+                        except Exception as be:
+                            log_diagnostic("error", "backup_bridge_failed", {"error": str(be)})
+
+                    if is_bedrock or is_conn:
+                        st.warning("⚠️ PROTOCOL ALERT: Tactical connection unstable. Retrying/Recovering…")
+                    else:
+                        st.warning("⚠️ PROTOCOL ALERT: Non-critical module error handled.")
+                    return fallback_value
+            return fallback_value
+
+        return _wrapped
+
+    if func is not None:
+        return _decorate(func)
+    return _decorate
+
+
 def _derive_wallet() -> str:
     if _HAS_CHAIN and _CHAIN is not None:
         return str(getattr(_CHAIN, "address", "0x0000000000000000000000000000000000000000"))
@@ -258,6 +337,7 @@ def init_session_state() -> None:
         "trust_history": [],
         "last_reg_tx": None,
         "analysis_latency_ms": 0,
+        "system_diagnostics": [],
         "calibration_data": [],
         "dex_enabled": bool(getattr(config, "DEX_ENABLED", False)) if config else False,
         "wallet_eth": 0.0,
@@ -814,11 +894,34 @@ button[data-baseweb="tab"][aria-selected="true"] {
 }
 
 /* ── Panel selector (segmented/radio) styled like tabs ── */
-[data-testid="stSegmentedControl"] [role="radiogroup"] {
-    gap: 0 !important;
-    border-bottom: 1px solid rgba(79,195,247,.20) !important;
+[data-testid="stSegmentedControl"],
+[data-testid="stRadio"] {
+    position: relative;
 }
+
+[data-testid="stSegmentedControl"] [role="radiogroup"] {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    white-space: nowrap !important;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    gap: 0 !important;
+    border: 1px solid rgba(79,195,247,.22) !important;
+    border-bottom: 1px solid rgba(79,195,247,.30) !important;
+    border-radius: 12px !important;
+    background: linear-gradient(180deg, rgba(12,12,31,.60), rgba(10,10,26,.48)) !important;
+    backdrop-filter: blur(8px) saturate(120%);
+    padding: 0 .35rem 0 .35rem !important;
+}
+[data-testid="stSegmentedControl"] [role="radiogroup"]::-webkit-scrollbar { display: none; }
 [data-testid="stSegmentedControl"] [role="radio"] {
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+    padding: 0.48rem 0.70rem !important;
+    margin: 0 !important;
+    gap: 0 !important;
     border: none !important;
     border-bottom: 2px solid transparent !important;
     border-radius: 0 !important;
@@ -829,15 +932,31 @@ button[data-baseweb="tab"][aria-selected="true"] {
 [data-testid="stSegmentedControl"] [role="radio"][aria-checked="true"] {
     color: #ffffff !important;
     border-bottom: 3px solid #64ffda !important;
+    box-shadow: inset 0 -1px 0 rgba(100,255,218,.35) !important;
     font-weight: 700 !important;
 }
 
 [data-testid="stRadio"] [role="radiogroup"] {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    white-space: nowrap !important;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     gap: 0 !important;
-    border-bottom: 1px solid rgba(79,195,247,.20) !important;
+    border: 1px solid rgba(79,195,247,.22) !important;
+    border-bottom: 1px solid rgba(79,195,247,.30) !important;
+    border-radius: 12px !important;
+    background: linear-gradient(180deg, rgba(12,12,31,.60), rgba(10,10,26,.48)) !important;
+    backdrop-filter: blur(8px) saturate(120%);
+    padding: 0 .35rem 0 .35rem !important;
 }
+[data-testid="stRadio"] [role="radiogroup"]::-webkit-scrollbar { display: none; }
 [data-testid="stRadio"] [role="radio"] {
-    padding: 0.42rem 0.65rem !important;
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+    padding: 0.48rem 0.70rem !important;
     margin: 0 !important;
     border: none !important;
     border-bottom: 2px solid transparent !important;
@@ -848,7 +967,67 @@ button[data-baseweb="tab"][aria-selected="true"] {
 [data-testid="stRadio"] [role="radio"][aria-checked="true"] {
     color: #ffffff !important;
     border-bottom: 3px solid #64ffda !important;
+    box-shadow: inset 0 -1px 0 rgba(100,255,218,.35) !important;
     font-weight: 700 !important;
+}
+
+.pz-nav-chev {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    border: 1px solid rgba(79,195,247,.35);
+    background: rgba(6,6,18,.72);
+    color: #9eeeff;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+}
+.pz-nav-chev:hover { border-color: #64ffda; color: #64ffda; }
+.pz-nav-chev.left { left: 6px; }
+.pz-nav-chev.right { right: 6px; }
+
+[data-testid="stSegmentedControl"].pz-overflow-left .pz-nav-chev.left,
+[data-testid="stSegmentedControl"].pz-overflow-right .pz-nav-chev.right,
+[data-testid="stRadio"].pz-overflow-left .pz-nav-chev.left,
+[data-testid="stRadio"].pz-overflow-right .pz-nav-chev.right {
+    display: inline-flex;
+}
+
+/* touch + mobile controls */
+[data-testid="stButton"] > button,
+[data-testid="baseButton-secondary"],
+[data-testid="baseButton-primary"] {
+    min-height: 40px;
+}
+
+@media (max-width: 768px) {
+    [data-testid="stSegmentedControl"] [role="radio"],
+    [data-testid="stRadio"] [role="radio"] {
+        padding: 0.42rem 0.58rem !important;
+        font-size: .82rem !important;
+    }
+
+    [data-testid="stButton"] > button {
+        width: 100% !important;
+        font-size: 0.88rem !important;
+        padding-top: 0.45rem !important;
+        padding-bottom: 0.45rem !important;
+    }
+
+    [data-testid="stTextInput"] input,
+    [data-testid="stNumberInput"] input,
+    [data-testid="stTextArea"] textarea,
+    [data-testid="stSelectbox"] input {
+        font-size: 0.9rem !important;
+    }
+
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -960,6 +1139,81 @@ window.addEventListener('error', function (e) {
         unsafe_allow_html=True,
     )
 
+    st.markdown(
+        """
+<script>
+(function() {
+    const STEP = 220;
+
+    function ensureChevron(container, side) {
+        const cls = `pz-nav-chev ${side}`;
+        let btn = container.querySelector(`.pz-nav-chev.${side}`);
+        if (!btn) {
+            btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = cls;
+            btn.setAttribute('aria-label', side === 'left' ? 'Scroll left' : 'Scroll right');
+            btn.innerText = side === 'left' ? '‹' : '›';
+            container.appendChild(btn);
+        }
+        return btn;
+    }
+
+    function wireContainer(container) {
+        if (!container) return;
+        const group = container.querySelector('[role="radiogroup"]');
+        if (!group) return;
+
+        const leftBtn = ensureChevron(container, 'left');
+        const rightBtn = ensureChevron(container, 'right');
+
+        function refresh() {
+            const overflow = group.scrollWidth > (group.clientWidth + 2);
+            container.classList.remove('pz-overflow-left', 'pz-overflow-right');
+            if (!overflow) return;
+            if (group.scrollLeft > 3) container.classList.add('pz-overflow-left');
+            if (group.scrollLeft + group.clientWidth < group.scrollWidth - 3) container.classList.add('pz-overflow-right');
+        }
+
+        if (!leftBtn.dataset.wired) {
+            leftBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                group.scrollBy({ left: -STEP, behavior: 'smooth' });
+            });
+            leftBtn.dataset.wired = '1';
+        }
+
+        if (!rightBtn.dataset.wired) {
+            rightBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                group.scrollBy({ left: STEP, behavior: 'smooth' });
+            });
+            rightBtn.dataset.wired = '1';
+        }
+
+        if (!group.dataset.wired) {
+            group.addEventListener('scroll', refresh, { passive: true });
+            window.addEventListener('resize', refresh, { passive: true });
+            group.dataset.wired = '1';
+        }
+
+        refresh();
+        setTimeout(refresh, 120);
+    }
+
+    function run() {
+        document.querySelectorAll('[data-testid="stSegmentedControl"], [data-testid="stRadio"]').forEach(wireContainer);
+    }
+
+    run();
+    const mo = new MutationObserver(run);
+    mo.observe(document.body, { childList: true, subtree: true });
+})();
+</script>
+""",
+        unsafe_allow_html=True,
+    )
+
 
 def mcard(label: str, value: str, delta: str = "", up: bool = True) -> str:
     dcls = "d-up" if up else "d-down"
@@ -1008,6 +1262,7 @@ def _try_fetch_live(symbol: str) -> pd.DataFrame | None:
         import ccxt
         for ex_name, symbols in [
             ("binance", [symbol, symbol.replace("USDT", "USD")]),
+            ("kraken", [symbol, symbol.replace("USDT", "USD")]),
             ("coinbase", [symbol.replace("USDT", "USD"), symbol]),
         ]:
             ex_cls = getattr(ccxt, ex_name, None)
@@ -1533,18 +1788,15 @@ def render_panel_nav(current_label: str) -> None:
     if current_label not in _PANELS:
         return
     st.session_state["active_panel"] = current_label
-    nav_key = f"active_panel_{current_label}"
+    nav_key = "active_panel"
     seg = getattr(st, "segmented_control", None)
     if callable(seg):
         try:
-            selected = seg("Panels", options=_PANELS, default=current_label, key=nav_key, label_visibility="collapsed")
-        except TypeError:
-            try:
-                selected = seg("Panels", options=_PANELS, key=nav_key, label_visibility="collapsed")
-            except Exception:
-                selected = st.radio("Panels", options=_PANELS, index=_PANELS.index(current_label), horizontal=True, key=nav_key, label_visibility="collapsed")
+            selected = seg("Panels", options=_PANELS, key=nav_key, label_visibility="collapsed")
+        except Exception:
+            selected = st.radio("Panels", options=_PANELS, horizontal=True, key=nav_key, label_visibility="collapsed")
     else:
-        selected = st.radio("Panels", options=_PANELS, index=_PANELS.index(current_label), horizontal=True, key=nav_key, label_visibility="collapsed")
+        selected = st.radio("Panels", options=_PANELS, horizontal=True, key=nav_key, label_visibility="collapsed")
     if selected and selected != current_label:
         target = PANEL_PAGE_MAP.get(selected)
         if target:
@@ -1569,6 +1821,11 @@ def render_sidebar() -> None:
         rep = int(st.session_state.get("reputation_score", 95))
         rep_c = "#64ffda" if rep >= 70 else ("#ffd93d" if rep >= 40 else "#ff6b6b")
         st.markdown(f'<div class="mcard"><div class="lbl">On-Chain Reputation</div><div class="val" style="color:{rep_c}">{rep}<span style="font-size:.8rem;color:#495670"> / 100</span></div></div>', unsafe_allow_html=True)
+
+        is_registered = bool(st.session_state.get("agent_registered", False))
+        reg_text = "✅ REGISTERED" if is_registered else "❌ UNREGISTERED"
+        reg_cls = "badge-green" if is_registered else "badge-red"
+        st.markdown(f'<span class="badge {reg_cls}">{reg_text}</span>', unsafe_allow_html=True)
 
         if st.button("🔗  Register On-Chain", use_container_width=True, type="primary"):
             reg = real_register_agent()
@@ -1611,8 +1868,9 @@ def render_header() -> None:
         return bedrock_runtime_probe(
             cloud_safe_mode=_CLOUD_SAFE_MODE,
             config_module=config,
-            aws_access_key=os.getenv("AWS_ACCESS_KEY_ID", ""),
-            aws_secret_key=os.getenv("AWS_SECRET_ACCESS_KEY", ""),
+            aws_access_key=getattr(config, "AWS_ACCESS_KEY_ID", os.getenv("AWS_ACCESS_KEY_ID", "")) if config else os.getenv("AWS_ACCESS_KEY_ID", ""),
+            aws_secret_key=getattr(config, "AWS_SECRET_ACCESS_KEY", os.getenv("AWS_SECRET_ACCESS_KEY", "")) if config else os.getenv("AWS_SECRET_ACCESS_KEY", ""),
+            bedrock_api_key=getattr(config, "BEDROCK_LONG_TERM_API_KEY", "") if config else "",
         )
 
     @st.cache_data(ttl=60, show_spinner=False)
@@ -1647,6 +1905,14 @@ def render_shell(current_panel: str | None = None, show_top_row: bool = True) ->
 
 
 def finalize_page() -> None:
+    diags = st.session_state.get("system_diagnostics", [])
+    if diags:
+        with st.expander("System Diagnostics", expanded=False):
+            for d in diags[-40:]:
+                details = d.get("details") or {}
+                st.caption(f"[{d.get('ts','--:--:--')}] {d.get('level','INFO')} · {d.get('message','event')}")
+                if details:
+                    st.code(json.dumps(details, default=str, indent=2), language="json")
     st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
     st.markdown(footer_html(), unsafe_allow_html=True)
     persist_session_state()
@@ -1683,3 +1949,30 @@ def get_eth_usd_price_hint() -> float:
     except Exception:
         pass
     return float(_BASE_PRICES.get("ETH/USDT", 3420.0))
+
+
+def refresh_wallet_balances(ttl_sec: int = 20) -> dict[str, float]:
+    now = time.time()
+    last = float(st.session_state.get("_wallet_bal_ts", 0.0) or 0.0)
+    if now - last < max(5, int(ttl_sec)):
+        return {
+            "wallet_eth": float(st.session_state.get("wallet_eth", 0.0) or 0.0),
+            "wallet_weth": float(st.session_state.get("wallet_weth", 0.0) or 0.0),
+            "wallet_usdc": float(st.session_state.get("wallet_usdc", 0.0) or 0.0),
+        }
+
+    if _HAS_DEX and _DEX is not None:
+        try:
+            bal = _DEX.get_balances()
+            st.session_state["wallet_eth"] = float(bal.get("eth", st.session_state.get("wallet_eth", 0.0)) or 0.0)
+            st.session_state["wallet_weth"] = float(bal.get("weth", st.session_state.get("wallet_weth", 0.0)) or 0.0)
+            st.session_state["wallet_usdc"] = float(bal.get("usdc", st.session_state.get("wallet_usdc", 0.0)) or 0.0)
+        except Exception:
+            pass
+
+    st.session_state["_wallet_bal_ts"] = now
+    return {
+        "wallet_eth": float(st.session_state.get("wallet_eth", 0.0) or 0.0),
+        "wallet_weth": float(st.session_state.get("wallet_weth", 0.0) or 0.0),
+        "wallet_usdc": float(st.session_state.get("wallet_usdc", 0.0) or 0.0),
+    }

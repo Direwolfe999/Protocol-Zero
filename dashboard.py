@@ -2769,8 +2769,9 @@ def _bedrock_runtime_probe() -> tuple[str, int, str]:
     return bedrock_runtime_probe(
         cloud_safe_mode=_CLOUD_SAFE_MODE,
         config_module=config,
-        aws_access_key=os.getenv("AWS_ACCESS_KEY_ID", ""),
-        aws_secret_key=os.getenv("AWS_SECRET_ACCESS_KEY", ""),
+        aws_access_key=getattr(config, "AWS_ACCESS_KEY_ID", os.getenv("AWS_ACCESS_KEY_ID", "")) if config else os.getenv("AWS_ACCESS_KEY_ID", ""),
+        aws_secret_key=getattr(config, "AWS_SECRET_ACCESS_KEY", os.getenv("AWS_SECRET_ACCESS_KEY", "")) if config else os.getenv("AWS_SECRET_ACCESS_KEY", ""),
+        bedrock_api_key=getattr(config, "BEDROCK_LONG_TERM_API_KEY", "") if config else "",
     )
 
 

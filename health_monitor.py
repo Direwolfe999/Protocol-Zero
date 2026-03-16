@@ -12,14 +12,15 @@ def bedrock_runtime_probe(
     config_module: Any,
     aws_access_key: str,
     aws_secret_key: str,
+    bedrock_api_key: str = "",
 ) -> tuple[str, int, str]:
     """Return (status, latency_ms, detail) based on a Bedrock runtime call."""
     if cloud_safe_mode:
         return "READY", 0, "Cloud-safe mode"
 
-    _ak = (aws_access_key or "").strip()
+    _ak = (aws_access_key or bedrock_api_key or "").strip()
     _sk = (aws_secret_key or "").strip()
-    if not (_ak and _sk) or _ak in ("your_aws_access_key", "your-access-key-id"):
+    if not _ak or _ak in ("your_aws_access_key", "your-access-key-id"):
         return "FALLBACK", 0, "No credentials"
 
     _t = time.perf_counter()
@@ -28,12 +29,10 @@ def bedrock_runtime_probe(
 
         _region = getattr(config_module, "AWS_DEFAULT_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1"))
         _model = getattr(config_module, "BEDROCK_MODEL_ID", "us.amazon.nova-lite-v1:0")
-        _client = _boto3_hc.client(
-            "bedrock-runtime",
-            region_name=_region,
-            aws_access_key_id=_ak,
-            aws_secret_access_key=_sk,
-        )
+        _kwargs: dict[str, Any] = {"region_name": _region, "aws_access_key_id": _ak}
+        if _sk:
+            _kwargs["aws_secret_access_key"] = _sk
+        _client = _boto3_hc.client("bedrock-runtime", **_kwargs)
         _client.converse(
             modelId=_model,
             messages=[{"role": "user", "content": [{"text": "health-check"}]}],

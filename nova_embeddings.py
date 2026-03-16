@@ -139,12 +139,7 @@ class NovaEmbeddingsAnalyzer:
 
         if self.enabled:
             try:
-                self._client = boto3.client(
-                    "bedrock-runtime",
-                    region_name=config.AWS_DEFAULT_REGION,
-                    aws_access_key_id=config.AWS_ACCESS_KEY_ID,
-                    aws_secret_access_key=config.AWS_SECRET_ACCESS_KEY,
-                )
+                self._client = boto3.client("bedrock-runtime", **config.bedrock_boto3_kwargs())
                 logger.info("✅ Nova Multimodal Embeddings analyzer initialized")
             except Exception as e:
                 logger.warning("Nova Embeddings init failed: %s", e)

@@ -25,57 +25,6 @@ with c4:
 	pnl = float(st.session_state.get("session_pnl", 0.0))
 	st.markdown(core.mcard("Session PnL", f"${pnl:+.2f}", up=pnl >= 0), unsafe_allow_html=True)
 
-st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
-st.markdown("#### Quick Navigation")
-
-qa1, qa2, qa3, qa4, qa5 = st.columns(5)
-with qa1:
-	if st.button("📊 Market", use_container_width=True):
-		st.switch_page("pages/01_Market.py")
-with qa2:
-	if st.button("🧠 AI Brain", use_container_width=True):
-		st.switch_page("pages/02_AI_Brain.py")
-with qa3:
-	if st.button("🛡️ Risk & Exec", use_container_width=True):
-		st.switch_page("pages/03_Risk_Execution.py")
-with qa4:
-	if st.button("🌐 Trust Panel", use_container_width=True):
-		st.switch_page("pages/04_Trust_Panel.py")
-with qa5:
-	if st.button("📊 Performance", use_container_width=True):
-		st.switch_page("pages/05_Performance.py")
-
-qb1, qb2, qb3, qb4, qb5 = st.columns(5)
-with qb1:
-	if st.button("🔗 Audit Trail", use_container_width=True):
-		st.switch_page("pages/06_Audit_Trail.py")
-with qb2:
-	if st.button("🧠 Calibration", use_container_width=True):
-		st.switch_page("pages/07_Calibration.py")
-with qb3:
-	if st.button("📡 Microstructure", use_container_width=True):
-		st.switch_page("pages/08_Microstructure.py")
-with qb4:
-	if st.button("📒 TX Log", use_container_width=True):
-		st.switch_page("pages/09_TX_Log.py")
-with qb5:
-	if st.button("📈 P&L", use_container_width=True):
-		st.switch_page("pages/10_PnL.py")
-
-qc1, qc2, qc3, qc4 = st.columns(4)
-with qc1:
-	if st.button("🔍 History", use_container_width=True):
-		st.switch_page("pages/11_History.py")
-with qc2:
-	if st.button("🔍 Nova Act Audit", use_container_width=True):
-		st.switch_page("pages/12_Nova_Act_Audit.py")
-with qc3:
-	if st.button("🎙️ Voice AI", use_container_width=True):
-		st.switch_page("pages/13_Voice_AI.py")
-with qc4:
-	if st.button("🖼️ Multimodal", use_container_width=True):
-		st.switch_page("pages/14_Multimodal.py")
-
 st.markdown("#### Session Snapshot")
 st.dataframe(
 	{
