@@ -1677,10 +1677,10 @@ def trade_dna_html(history: list[dict[str, Any]]) -> str:
     )
 
 
-def risk_heatmap_html(state: dict[str, Any], decision: dict[str, Any] | None, vol_mult: float) -> str:
-    cap = state.get("total_capital_usd", 0)
-    pnl = state.get("session_pnl", 0)
-    max_loss = state.get("max_daily_loss_usd", 1)
+def risk_heatmap_html(state: dict[str, Any] | None, decision: dict[str, Any] | None, vol_mult: float) -> str:
+    cap = state.get("total_capital_usd", 0) if state else 0
+    pnl = state.get("session_pnl", 0) if state else 0
+    max_loss = state.get("max_daily_loss_usd", 1) if state else 1
     exposure = decision.get("position_size_percent", 0) if decision else 0
     risk_bud = max(0, 1 - abs(pnl) / max_loss) * 100 if max_loss else 100
     cap_risk = (decision.get("amount_usd", 0) / cap * 100) if (cap and decision) else 0
