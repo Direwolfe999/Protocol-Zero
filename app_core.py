@@ -1664,7 +1664,7 @@ function render(){{
   el.style.animation='none';el.offsetHeight;el.style.animation='fadeIn .35s ease-out';
 }}
 function go(d){{cur=Math.max(0,Math.min(total-1,cur+d));render();}}
-function launch(){{window.location.href=window.location.pathname+'?skip_intro=true';}}
+function launch(){{window.location.href=window.location.pathname+'?intro_done=1';}}
 render();
 </script></body></html>"""
 
