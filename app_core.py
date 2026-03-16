@@ -1533,11 +1533,18 @@ def render_panel_nav(current_label: str) -> None:
     if current_label not in _PANELS:
         return
     st.session_state["active_panel"] = current_label
+    nav_key = f"active_panel_{current_label}"
     seg = getattr(st, "segmented_control", None)
     if callable(seg):
-        selected = seg("Panels", options=_PANELS, index=_PANELS.index(current_label), key=f"active_panel_{current_label}", label_visibility="collapsed")
+        try:
+            selected = seg("Panels", options=_PANELS, default=current_label, key=nav_key, label_visibility="collapsed")
+        except TypeError:
+            try:
+                selected = seg("Panels", options=_PANELS, key=nav_key, label_visibility="collapsed")
+            except Exception:
+                selected = st.radio("Panels", options=_PANELS, index=_PANELS.index(current_label), horizontal=True, key=nav_key, label_visibility="collapsed")
     else:
-        selected = st.radio("Panels", options=_PANELS, index=_PANELS.index(current_label), horizontal=True, key=f"active_panel_{current_label}", label_visibility="collapsed")
+        selected = st.radio("Panels", options=_PANELS, index=_PANELS.index(current_label), horizontal=True, key=nav_key, label_visibility="collapsed")
     if selected and selected != current_label:
         target = PANEL_PAGE_MAP.get(selected)
         if target:
