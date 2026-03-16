@@ -9,10 +9,15 @@ import streamlit as st
 import app_core as core
 
 
+# Check if user clicked "Launch Dashboard" (sets query param)
+if st.query_params.get("launch") == "1":
+    st.session_state["_intro_completed"] = True
+    # Clear the query parameter
+    st.query_params.clear()
+
 # Show intro screen once per session
 if not st.session_state.get("_intro_completed", False):
     core.render_intro_screen()
-    st.session_state["_intro_completed"] = True
     st.stop()
 
 df = core.render_shell(show_top_row=True)
