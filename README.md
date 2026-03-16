@@ -29,13 +29,14 @@ and a multi-layered risk management pipeline.
 
 > **📺 Demo Video** — *Coming soon before final submission.*
 >
-> Run `streamlit run streamlit_app.py` to see Protocol Zero live: AI-driven market analysis, EIP-712 intent signing, and on-chain ERC-8004 registration — all in one cinematic dashboard.
+> Run `streamlit run pages/00_Dashboard.py` to see Protocol Zero live with the **15-page multipage interface**:
+> Dashboard, Market, AI Brain, Risk & Execution, Trust Panel, Performance, Audit Trail, Calibration, Microstructure, TX Log, P&L, History, Nova Act Audit, Multimodal, and Voice AI — all accessible from the sidebar.
 
 ---
 
 ## 📸 Screenshots
 
-> Run `streamlit run streamlit_app.py` to experience the full cinematic dashboard: cognitive stream, market regime orb, trade DNA, risk heat-map, XAI reasoning panel, and more.
+> Run `streamlit run` from the project root to launch the multipage interface with premium styling, Voice AI controls, keyboard shortcuts (Alt+V), accessibility features (high contrast mode), and real-time market analysis across 15 specialized pages.
 >
 > *Screenshots will be added before final submission.*
 
@@ -68,7 +69,7 @@ and a multi-layered risk management pipeline.
 | `eip712_signer.py` | Pure cryptographic EIP-712 module — no RPC required |
 | `chain_interactor.py` | Web3 bridge for the three ERC-8004 registries (Identity, Reputation, Validation) |
 | `dex_executor.py` | Live Uniswap V3 swap execution with slippage protection |
-| `dashboard.py` | Streamlit cinematic dashboard with cognitive stream, market orb, trade DNA, risk heatmap |
+| `app_core.py` | Core Streamlit functions for all 15 pages: rendering, market data, voice AI, on-chain integration |
 | `config.py` | Centralized configuration — loads `.env` with validation |
 | `metadata_handler.py` | ERC-8004 `agent-identity.json` generator with keccak256 & IPFS CID hashing |
 | `performance_tracker.py` | Session analytics — Sharpe ratio, win rate, drawdown tracking |
@@ -130,9 +131,105 @@ python main.py
 # Continuous trading loop
 python main.py --loop
 
-# Launch the dashboard
-streamlit run streamlit_app.py
+# Launch the multipage Streamlit interface
+streamlit run pages/00_Dashboard.py
+
+# Or just run streamlit in the project root
+streamlit run
 ```
+
+---
+
+## 🔌 API Endpoints (app_core.py)
+
+The core application module exports the following public functions:
+
+### Session Management
+
+| Function | Purpose | Returns |
+|---|---|---|
+| `init_session_state()` | Initialize all session state keys | None |
+| `persist_session_state()` | Save session state to disk | None |
+| `module_flags()` → `dict` | Get feature flags (nova_sonic, nova_embed, etc) | Dict with boolean flags |
+
+### Dashboard Rendering
+
+| Function | Purpose | Returns |
+|---|---|---|
+| `render_intro_screen()` | Show welcome screen on first load | None |
+| `render_shell(current_panel, show_top_row)` → `pd.DataFrame` | Main dashboard wrapper | Market DataFrame |
+| `render_header()` | Render top banner with title | None |
+| `render_sidebar()` | Render navigation sidebar | None |
+| `render_panel_nav(label)` | Render page-level navigation | None |
+| `finalize_page()` | Cleanup and finalization | None |
+
+### Voice AI Components
+
+| Function | Purpose | Returns |
+|---|---|---|
+| `render_voice_waveform(num_bars)` → `str` | HTML waveform animation | HTML string |
+| `render_voice_thinking()` → `str` | HTML thinking indicator | HTML string |
+| `render_voice_progress(percentage)` → `str` | HTML progress bar | HTML string |
+| `render_voice_command_card(intent, command, confidence)` → `str` | Command card HTML | HTML string |
+
+### Market Data
+
+| Function | Purpose | Returns |
+|---|---|---|
+| `load_market_data(symbol)` → `pd.DataFrame` | Fetch OHLCV data for symbol | DataFrame with OHLCV |
+| `ensure_market_data()` → `pd.DataFrame` | Get cached or fresh market data | DataFrame |
+| `detect_regime(df, vol_mult)` → `str` | Classify market regime | One of: "trending_up", "trending_down", "ranging", "volatile" |
+| `run_analysis(df, pair, vol_mult)` → `dict` | Run Nova AI analysis on market | Decision dict with signals |
+| `check_rug_pull(df)` → `dict \| None` | Detect potential rug pull | Dict with risk metrics or None |
+
+### Analysis & Visualization
+
+| Function | Purpose | Returns |
+|---|---|---|
+| `regime_orb_html(regime)` → `str` | Market regime visual indicator | HTML string |
+| `trade_dna_html(history)` → `str` | Trade history visualization | HTML string |
+| `risk_heatmap_html(state, decision, vol_mult)` → `str` | Risk matrix visualization | HTML string |
+| `risk_router_html(decision)` → `str` | Risk check results display | HTML string |
+| `xai_panel_html(decision, df)` → `str` | Explainable AI reasoning panel | HTML string |
+| `pnl_chart(tx_log)` → `go.Figure \| None` | P&L chart over time | Plotly figure |
+| `confidence_gauge(conf)` → `go.Figure` | Confidence meter | Plotly figure |
+| `decision_feed_html(limit)` → `str` | Recent decisions feed | HTML string |
+
+### On-Chain Integration
+
+| Function | Purpose | Returns |
+|---|---|---|
+| `real_register_agent()` → `dict` | Register agent on ERC-8004 Identity Registry | Dict with tx hash |
+| `real_execute_trade(decision, df)` → `dict` | Execute trade on-chain | Dict with execution details |
+| `fetch_on_chain_identity()` → `dict` | Retrieve agent identity from chain | Dict with agent metadata |
+| `fetch_on_chain_reputation()` → `dict` | Get agent reputation score | Dict with reputation metrics |
+| `fetch_validation_summary()` → `dict` | Fetch validation artifacts | Dict with validation history |
+
+### Wallet & Pricing
+
+| Function | Purpose | Returns |
+|---|---|---|
+| `get_eth_usd_price_hint()` → `float` | Get current ETH/USD price | Float price |
+| `refresh_wallet_balances(ttl_sec)` → `dict` | Fetch wallet token balances | Dict with token → balance |
+
+### Performance & Analytics
+
+| Function | Purpose | Returns |
+|---|---|---|
+| `get_performance_report()` → `dict` | Get session performance metrics | Dict with Sharpe, win rate, etc |
+| `cached_equity_curve_from_txlog(tx_log_json, starting_capital)` → `list[float]` | Compute equity curve | List of cumulative values |
+| `cached_regime_breakdown_from_logs(decision_history_json, tx_log_json)` → `dict` | Regime distribution | Dict with regime counts |
+| `load_artifacts()` → `list[dict]` | Load all validation artifacts | List of artifact dicts |
+
+### Utilities
+
+| Function | Purpose | Returns |
+|---|---|---|
+| `log_diagnostic(level, message, details)` | Log diagnostic information | None |
+| `cog(symbol, text, level)` | Add entry to cognitive stream | None |
+| `render_cognitive_stream()` → `str` | Get cognitive stream HTML | HTML string |
+| `simulate_trade(decision, capital)` → `dict` | Simulate trade without executing | Dict with simulated P&L |
+| `mcard(label, value, delta, up)` → `str` | Render metric card HTML | HTML string |
 
 ---
 
@@ -291,11 +388,10 @@ must be identical on both sides.
 
 ```
 Protocol-Zero/
+├── app_core.py               # 🎯 Core Streamlit module (2600+ lines) - all page functions
 ├── brain.py                  # AI reasoning engine (Nova Lite + tool-use)
 ├── chain_interactor.py       # Web3 bridge for ERC-8004 registries
 ├── config.py                 # Centralized .env loader with validation
-├── dashboard.py              # Streamlit cinematic dashboard
-├── streamlit_app.py          # Streamlit Cloud entrypoint (main module)
 ├── dex_executor.py           # Uniswap V3 live swap execution
 ├── eip712_signer.py          # EIP-712 structured data signing
 ├── exceptions.py             # Custom exception hierarchy
@@ -310,6 +406,22 @@ Protocol-Zero/
 ├── risk_check.py             # 6-layer fail-closed risk gate
 ├── sign_trade.py             # Trade intent validator & signer
 ├── validation_artifacts.py   # Cryptographic audit trail builder
+├── pages/                    # 📄 Streamlit multipage interface (15 pages)
+│   ├── 00_Dashboard.py       # Portfolio overview & metrics
+│   ├── 01_Market.py          # Real-time market data & charts
+│   ├── 02_AI_Brain.py        # Nova reasoning analysis
+│   ├── 03_Risk_Execution.py  # Risk checks & trade execution
+│   ├── 04_Trust_Panel.py     # Agent trust & reputation
+│   ├── 05_Performance.py     # P&L and performance metrics
+│   ├── 06_Audit_Trail.py     # Transaction & decision logs
+│   ├── 07_Calibration.py     # Model calibration tools
+│   ├── 08_Microstructure.py  # Order book analysis
+│   ├── 09_TX_Log.py          # Raw transaction history
+│   ├── 10_PnL.py             # Profit/loss details
+│   ├── 11_History.py         # Historical lookups
+│   ├── 12_Nova_Act_Audit.py  # Smart contract audit
+│   ├── 13_Voice_AI.py        # 🎙️ Voice command interface with premium UI
+│   └── 14_Multimodal.py      # Multimodal AI analysis
 ├── tests/                    # Unit & integration tests
 │   ├── test_brain.py         # Brain rule-engine + parser tests
 │   ├── test_eip712_signer.py # EIP-712 signing + nonce persistence
