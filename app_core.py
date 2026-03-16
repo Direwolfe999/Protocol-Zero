@@ -1658,11 +1658,13 @@ function render(){{
   let nh='';
   if(cur>0) nh+='<button class="btn" onclick="go(-1)">← Back</button>';
   if(cur<total-1){{nh+='<button class="btn primary" onclick="go(1)">Next →</button>';}}
+  else{{nh+='<button class="btn primary" onclick="launch()">🚀 Launch Dashboard</button>';}}
   document.getElementById('nav').innerHTML=nh;
   const el=document.getElementById('slide');
   el.style.animation='none';el.offsetHeight;el.style.animation='fadeIn .35s ease-out';
 }}
 function go(d){{cur=Math.max(0,Math.min(total-1,cur+d));render();}}
+function launch(){{window.location.reload();}}
 render();
 </script></body></html>"""
 
