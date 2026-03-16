@@ -8,16 +8,20 @@ import streamlit as st
 
 import app_core as core
 
-
-# Check if user clicked "Launch Dashboard" (sets query param)
-if st.query_params.get("launch") == "1":
-    st.session_state["_intro_completed"] = True
-    # Clear the query parameter
-    st.query_params.clear()
+# Initialize intro flag from localStorage if set
+st.markdown("""
+<script>
+if (localStorage.getItem('pz_intro_done') === 'true') {
+    window.streamlit_intro_done = true;
+    localStorage.removeItem('pz_intro_done');
+}
+</script>
+""", unsafe_allow_html=True)
 
 # Show intro screen once per session
 if not st.session_state.get("_intro_completed", False):
     core.render_intro_screen()
+    st.session_state["_intro_completed"] = True
     st.stop()
 
 df = core.render_shell(show_top_row=True)
