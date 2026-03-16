@@ -761,6 +761,44 @@ button[data-baseweb="tab"][aria-selected="true"] {
     font-weight: 700 !important;
 }
 
+/* ── Panel selector (segmented/radio) styled like tabs ── */
+[data-testid="stSegmentedControl"] [role="radiogroup"] {
+    gap: 0 !important;
+    border-bottom: 1px solid rgba(79,195,247,.20) !important;
+}
+[data-testid="stSegmentedControl"] [role="radio"] {
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: #b7c6f2 !important;
+    box-shadow: none !important;
+}
+[data-testid="stSegmentedControl"] [role="radio"][aria-checked="true"] {
+    color: #ffffff !important;
+    border-bottom: 3px solid #64ffda !important;
+    font-weight: 700 !important;
+}
+
+[data-testid="stRadio"] [role="radiogroup"] {
+    gap: 0 !important;
+    border-bottom: 1px solid rgba(79,195,247,.20) !important;
+}
+[data-testid="stRadio"] [role="radio"] {
+    padding: 0.42rem 0.65rem !important;
+    margin: 0 !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: #b7c6f2 !important;
+}
+[data-testid="stRadio"] [role="radio"][aria-checked="true"] {
+    color: #ffffff !important;
+    border-bottom: 3px solid #64ffda !important;
+    font-weight: 700 !important;
+}
+
 /* ══════════════════════════════════════════════════════════
    COPY / SELECT PROTECTION
    Disable casual text selection site-wide, but allow it
@@ -2866,9 +2904,50 @@ _PANELS = [
 if "active_panel" not in st.session_state:
     st.session_state["active_panel"] = _PANELS[0]
 
+_PANEL_PAGE_MAP = {
+    "📊  Market": "pages/01_Market.py",
+    "🧠  AI Brain": "pages/02_AI_Brain.py",
+    "🛡️  Risk & Exec": "pages/03_Risk_Execution.py",
+    "🌐  Trust Panel": "pages/04_Trust_Panel.py",
+    "📊  Performance": "pages/05_Performance.py",
+    "🔗  Audit Trail": "pages/06_Audit_Trail.py",
+    "🧠  Calibration": "pages/07_Calibration.py",
+    "📡  Microstructure": "pages/08_Microstructure.py",
+    "📒  TX Log": "pages/09_TX_Log.py",
+    "📈  P&L": "pages/10_PnL.py",
+    "🔍  History": "pages/11_History.py",
+    "🔍  Nova Act Audit": "pages/12_Nova_Act_Audit.py",
+    "🎙️  Voice AI": "pages/13_Voice_AI.py",
+    "🖼️  Multimodal": "pages/14_Multimodal.py",
+}
+
 if _FORCE_ACTIVE_PANEL in _PANELS:
-    _active_panel = _FORCE_ACTIVE_PANEL
     st.session_state["active_panel"] = _FORCE_ACTIVE_PANEL
+    _seg = getattr(st, "segmented_control", None)
+    if callable(_seg):
+        _nav_panel = _seg(
+            "Panels",
+            options=_PANELS,
+            key="active_panel",
+            label_visibility="collapsed",
+        )
+    else:
+        _nav_panel = st.radio(
+            "Panels",
+            options=_PANELS,
+            key="active_panel",
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+    if _nav_panel and _nav_panel != _FORCE_ACTIVE_PANEL:
+        _target = _PANEL_PAGE_MAP.get(_nav_panel)
+        if _target:
+            try:
+                st.switch_page(_target)
+                st.stop()
+            except Exception:
+                pass
+    _active_panel = _FORCE_ACTIVE_PANEL
 else:
     _seg = getattr(st, "segmented_control", None)
     if callable(_seg):
