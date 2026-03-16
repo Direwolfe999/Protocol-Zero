@@ -50,6 +50,8 @@ _SINGLE_PANEL_MODE = os.getenv(
     "PZ_SINGLE_PANEL_MODE",
     "1" if _CLOUD_SAFE_MODE else "0",
 ).strip().lower() in {"1", "true", "yes", "on"}
+_SKIP_PAGE_CONFIG = os.getenv("PZ_SKIP_PAGE_CONFIG", "0").strip().lower() in {"1", "true", "yes", "on"}
+_FORCE_ACTIVE_PANEL = os.getenv("PZ_FORCE_ACTIVE_PANEL", "").strip()
 
 # Hosted stability hardening:
 # Widget interactions already trigger a rerun automatically. Extra explicit
@@ -217,12 +219,13 @@ else:
 #  Page Config
 # ════════════════════════════════════════════════════════════
 
-st.set_page_config(
-    page_title="Protocol Zero · Autonomous Agent",
-    page_icon="🛡️",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+if not _SKIP_PAGE_CONFIG:
+    st.set_page_config(
+        page_title="Protocol Zero · Autonomous Agent",
+        page_icon="🛡️",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
 
 
 def _fragmentize(func):
@@ -2777,7 +2780,9 @@ _PANELS = [
     "🖼️  Multimodal",
 ]
 
-if _SINGLE_PANEL_MODE:
+if _FORCE_ACTIVE_PANEL in _PANELS:
+    _active_panel = _FORCE_ACTIVE_PANEL
+elif _SINGLE_PANEL_MODE:
     st.caption("Stability mode: rendering one panel at a time to prevent websocket drops.")
     _active_panel = st.radio(
         "Panel",
