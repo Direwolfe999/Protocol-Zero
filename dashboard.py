@@ -1495,6 +1495,69 @@ def _get_performance_report() -> dict:
         return {}
 
 
+def _safe_pnl_value(raw: Any) -> float:
+    """Parse PnL values like '$+1.23' robustly."""
+    try:
+        return float(str(raw).replace("$", "").replace(",", "").replace("+", "").strip())
+    except Exception:
+        return 0.0
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _cached_equity_curve_from_txlog(tx_log_json: str, starting_capital: float = 10_000.0) -> list[float]:
+    """Build realtime equity curve from tx log with short TTL caching."""
+    try:
+        tx_log = json.loads(tx_log_json)
+    except Exception:
+        tx_log = []
+
+    equity = [float(starting_capital)]
+    cum = float(starting_capital)
+    for t in tx_log:
+        if str(t.get("action", "")).upper() in {"BUY", "SELL"}:
+            cum += _safe_pnl_value(t.get("pnl", "$0"))
+            equity.append(round(cum, 2))
+    return equity
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _cached_regime_breakdown_from_logs(decision_history_json: str, tx_log_json: str) -> dict[str, dict[str, int]]:
+    """Compute realtime regime win/loss breakdown from current session logs."""
+    try:
+        history = json.loads(decision_history_json)
+    except Exception:
+        history = []
+    try:
+        tx_log = json.loads(tx_log_json)
+    except Exception:
+        tx_log = []
+
+    # Map decision timestamps to regime labels.
+    ts_to_regime: dict[str, str] = {}
+    for d in history:
+        _ts = str(d.get("timestamp") or d.get("time") or "").strip()
+        _rg = str(d.get("market_regime") or d.get("regime") or "UNCERTAIN").strip().upper()
+        if _ts:
+            ts_to_regime[_ts] = _rg
+
+    out: dict[str, dict[str, int]] = {}
+    for t in tx_log:
+        _action = str(t.get("action", "")).upper()
+        if _action not in {"BUY", "SELL"}:
+            continue
+        _ts = str(t.get("timestamp") or "").strip()
+        _reg = ts_to_regime.get(_ts, "UNCERTAIN")
+        _pnl = _safe_pnl_value(t.get("pnl", "$0"))
+        if _reg not in out:
+            out[_reg] = {"wins": 0, "losses": 0}
+        if _pnl > 0:
+            out[_reg]["wins"] += 1
+        else:
+            out[_reg]["losses"] += 1
+
+    return out
+
+
 @st.cache_data(ttl=30, show_spinner=False)
 def _load_artifacts() -> list[dict]:
     """Load validation artifacts from disk (cached 30s)."""
@@ -2335,6 +2398,25 @@ def _render_ai_analysis_fragment() -> None:
         })
 
 
+@_fragmentize
+def _render_clear_tx_log_fragment() -> None:
+    """Fragmentized clear-log action."""
+    if st.button("🗑  Clear Log", use_container_width=True):
+        st.session_state["tx_log"] = []
+        st.session_state["session_pnl"] = 0.0
+        st.session_state["trade_count"] = 0
+        st.session_state["decision_history"] = []
+        st.session_state["cognitive_log"] = []
+        st.session_state["latest_decision"] = None
+        st.rerun()
+
+
+@_fragmentize
+def _render_refresh_trust_fragment() -> None:
+    """Fragmentized trust-refresh action."""
+    _render_refresh_trust_fragment()
+
+
 # ════════════════════════════════════════════════════════════
 #  SIDEBAR
 # ════════════════════════════════════════════════════════════
@@ -3117,14 +3199,7 @@ with tab_log:
                 use_container_width=True,
             )
         with _clr_col:
-            if st.button("🗑  Clear Log", use_container_width=True):
-                st.session_state["tx_log"]            = []
-                st.session_state["session_pnl"]       = 0.0
-                st.session_state["trade_count"]       = 0
-                st.session_state["decision_history"]  = []
-                st.session_state["cognitive_log"]     = []
-                st.session_state["latest_decision"]   = None
-                st.rerun()
+            _render_clear_tx_log_fragment()
     else:
         st.markdown(
             '<div style="text-align:center;padding:3rem;color:#495670">'
@@ -3403,6 +3478,167 @@ with tab_trust:
         st.session_state["_trust_cache_ts"] = time.time()
         _cog("✓", "Trust data refreshed from chain", "ok")
 
+
+@_fragmentize
+def _render_nova_act_run_fragment(audit_address: str, audit_type: str) -> None:
+    """Fragmentized Nova Act audit action."""
+    if st.button("🔍 Run Nova Act Audit", key="btn_nova_audit", type="primary"):
+        if not audit_address or len(audit_address) < 10:
+            st.error("Please enter a valid contract address.")
+            return
+        with st.spinner("🤖 Nova Act is automating browser-based audit…"):
+            _cog("🔍", f"Nova Act auditing {audit_address[:16]}…", "info")
+            try:
+                if audit_type == "Contract":
+                    result = _NOVA_ACT.audit_contract(audit_address)
+                elif audit_type == "Token":
+                    result = _NOVA_ACT.audit_token(audit_address)
+                else:
+                    result = _NOVA_ACT.quick_safety_check(audit_address)
+
+                entry = {
+                    "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                    "address": audit_address,
+                    "type": audit_type,
+                    "result": result.__dict__ if hasattr(result, '__dict__') else result,
+                }
+                st.session_state["nova_act_results"].append(entry)
+                _cog("✓", f"Audit complete — risk: {getattr(result, 'risk_level', 'N/A')}", "ok")
+            except Exception as e:
+                st.error(f"Audit failed: {e}")
+                _cog("✗", f"Nova Act error: {e}", "err")
+
+
+@_fragmentize
+def _render_voice_send_fragment(voice_text: str) -> None:
+    """Fragmentized Nova Sonic free-text command action."""
+    if st.button("🎤 Send", key="btn_voice_send", type="primary") and voice_text:
+        with st.spinner("🎙️ Processing with Nova Sonic…"):
+            _cog("🎤", f"Voice command: {voice_text[:40]}…", "info")
+            try:
+                response = _NOVA_SONIC.process_voice_text(
+                    voice_text,
+                    context={
+                        "portfolio_value": st.session_state.get("total_capital_usd", 10000),
+                        "session_pnl": st.session_state.get("session_pnl", 0),
+                        "trade_count": st.session_state.get("trade_count", 0),
+                        "kill_switch": st.session_state.get("kill_switch_active", False),
+                        "regime": st.session_state.get("market_regime", "UNCERTAIN"),
+                        "latest_decision": st.session_state.get("latest_decision"),
+                    }
+                )
+
+                entry = {
+                    "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                    "command": voice_text,
+                    "intent": getattr(response, 'intent_handled', 'unknown') if hasattr(response, 'intent_handled') else response.get('intent_handled', 'unknown'),
+                    "response_text": getattr(response, 'text', str(response)) if hasattr(response, 'text') else response.get('text', str(response)),
+                    "success": getattr(response, 'success', True) if hasattr(response, 'success') else response.get('success', True),
+                }
+                st.session_state["nova_voice_history"].append(entry)
+
+                intent = entry["intent"]
+                if intent == "kill_switch":
+                    st.session_state["kill_switch_active"] = True
+                    st.session_state["autonomous_mode"] = False
+                    _cog("⛔", "Voice command triggered KILL SWITCH", "err")
+
+                _cog("✓", f"Voice response: {entry['response_text'][:60]}…", "ok")
+            except Exception as e:
+                st.error(f"Voice processing failed: {e}")
+                _cog("✗", f"Nova Sonic error: {e}", "err")
+
+
+@_fragmentize
+def _render_voice_alert_fragment(alert_msg: str, alert_sev: str) -> None:
+    """Fragmentized Nova Sonic alert generation action."""
+    if st.button("🔊 Generate Alert", key="btn_gen_alert") and alert_msg:
+        with st.spinner("Generating voice alert…"):
+            try:
+                alert_resp = _NOVA_SONIC.generate_alert(alert_sev, {"message": alert_msg})
+                alert_text = getattr(alert_resp, 'text', str(alert_resp)) if hasattr(alert_resp, 'text') else alert_resp.get('text', str(alert_resp))
+                st.session_state["nova_voice_history"].append({
+                    "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                    "command": f"[ALERT:{alert_sev.upper()}] {alert_msg}",
+                    "intent": "alert",
+                    "response_text": alert_text,
+                    "success": True,
+                })
+                _cog("🚨", f"Alert generated: {alert_text[:60]}…", "err" if alert_sev in ("high", "critical") else "info")
+            except Exception as e:
+                st.error(str(e))
+
+
+@_fragmentize
+def _render_multimodal_actions_fragment(
+    embed_mode: str,
+    embed_text: str,
+    img_url: str,
+    logo_url1: str,
+    logo_url2: str,
+    chart_url: str,
+) -> None:
+    """Fragmentized multimodal actions."""
+    if embed_mode == "📝 Text Analysis":
+        if st.button("🔍 Analyze Text", key="btn_embed_text", type="primary") and embed_text:
+            with st.spinner("🧠 Analyzing with Nova Embeddings…"):
+                _cog("🖼️", "Running multimodal text analysis…", "info")
+                try:
+                    result = _NOVA_EMBED.analyze_text(embed_text)
+                    st.session_state["nova_embed_results"].append({
+                        "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                        "mode": "text",
+                        "input_preview": embed_text[:80],
+                        "result": result.__dict__ if hasattr(result, '__dict__') else result,
+                    })
+                    _cog("✓", f"Text analysis — risk: {getattr(result, 'risk_label', 'N/A')}", "ok")
+                except Exception as e:
+                    st.error(f"Analysis failed: {e}")
+                    _cog("✗", f"Embeddings error: {e}", "err")
+    elif embed_mode == "🖼️ Image Analysis":
+        if st.button("🔍 Analyze Image", key="btn_embed_img", type="primary") and img_url:
+            with st.spinner("🖼️ Analyzing image with Nova Embeddings…"):
+                _cog("🖼️", "Running multimodal image analysis…", "info")
+                try:
+                    result = _NOVA_EMBED.analyze_image(img_url.encode("utf-8"), context=img_url)
+                    st.session_state["nova_embed_results"].append({
+                        "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                        "mode": "image",
+                        "input_preview": img_url[:80],
+                        "result": result.__dict__ if hasattr(result, '__dict__') else result,
+                    })
+                    _cog("✓", f"Image analysis — risk: {getattr(result, 'risk_label', 'N/A')}", "ok")
+                except Exception as e:
+                    st.error(f"Analysis failed: {e}")
+    elif embed_mode == "🔍 Logo Comparison":
+        if st.button("🔍 Compare Logos", key="btn_compare_logos", type="primary") and logo_url1 and logo_url2:
+            with st.spinner("🔍 Comparing logos…"):
+                try:
+                    result = _NOVA_EMBED.compare_logos(logo_url1.encode("utf-8"), reference_name=logo_url2)
+                    st.session_state["nova_embed_results"].append({
+                        "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                        "mode": "logo_compare",
+                        "input_preview": f"{logo_url1[:30]}… vs {logo_url2[:30]}…",
+                        "result": result.__dict__ if hasattr(result, '__dict__') else result,
+                    })
+                    _cog("✓", "Logo comparison complete", "ok")
+                except Exception as e:
+                    st.error(f"Comparison failed: {e}")
+    else:
+        if st.button("🔍 Analyze Chart", key="btn_chart_analyze", type="primary") and chart_url:
+            with st.spinner("📊 Analyzing chart pattern…"):
+                try:
+                    result = _NOVA_EMBED.analyze_chart(chart_url.encode("utf-8"))
+                    st.session_state["nova_embed_results"].append({
+                        "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                        "mode": "chart",
+                        "input_preview": chart_url[:80],
+                        "result": result.__dict__ if hasattr(result, '__dict__') else result,
+                    })
+                    _cog("✓", f"Chart analysis — risk: {getattr(result, 'risk_label', 'N/A')}", "ok")
+                except Exception as e:
+                    st.error(f"Analysis failed: {e}")
+
     identity_data = st.session_state["_trust_cache"]["identity"]
     rep_data = st.session_state["_trust_cache"]["reputation"]
     val_data = st.session_state["_trust_cache"]["validation"]
@@ -3661,16 +3897,13 @@ with tab_perf:
 
     # ── Equity Curve ───────────────────────────────────
     st.markdown("#### 📈 Equity Curve")
-    equity_data = perf_report.get("equity_curve", [])
-    if not equity_data:
-        # Build from session PnL data
-        cum = 10_000.0
-        equity_data = [cum]
-        for t in st.session_state["tx_log"]:
-            if t.get("action") in ("BUY", "SELL"):
-                pnl_val = float(t.get("pnl", "$0").replace("$", "").replace("+", ""))
-                cum += pnl_val
-                equity_data.append(cum)
+    _tx_log_json = json.dumps(st.session_state.get("tx_log", []), default=str, sort_keys=True)
+    _hist_json = json.dumps(st.session_state.get("decision_history", []), default=str, sort_keys=True)
+
+    equity_data = _cached_equity_curve_from_txlog(_tx_log_json, 10_000.0)
+    if len(equity_data) <= 1:
+        # Fallback to tracker report if session log is still empty.
+        equity_data = perf_report.get("equity_curve", []) or equity_data
 
     if len(equity_data) > 1:
         fig_eq = go.Figure()
@@ -3718,7 +3951,9 @@ with tab_perf:
 
     # ── Regime Breakdown ───────────────────────────────
     st.markdown("#### 🎯 Performance by Market Regime")
-    regime_data = perf_report.get("regime_breakdown", {})
+    regime_data = _cached_regime_breakdown_from_logs(_hist_json, _tx_log_json)
+    if not regime_data:
+        regime_data = perf_report.get("regime_breakdown", {})
     if regime_data:
         regimes = list(regime_data.keys())
         wins = [regime_data[r].get("wins", 0) for r in regimes]
@@ -4125,32 +4360,7 @@ with tab_nova_act:
                 horizontal=True, key="nova_act_type",
             )
 
-        if st.button("🔍 Run Nova Act Audit", key="btn_nova_audit", type="primary"):
-            if not audit_address or len(audit_address) < 10:
-                st.error("Please enter a valid contract address.")
-            else:
-                with st.spinner("🤖 Nova Act is automating browser-based audit…"):
-                    _cog("🔍", f"Nova Act auditing {audit_address[:16]}…", "info")
-                    try:
-                        if audit_type == "Contract":
-                            result = _NOVA_ACT.audit_contract(audit_address)
-                        elif audit_type == "Token":
-                            result = _NOVA_ACT.audit_token(audit_address)
-                        else:
-                            result = _NOVA_ACT.quick_safety_check(audit_address)
-
-                        # Store result
-                        entry = {
-                            "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
-                            "address": audit_address,
-                            "type": audit_type,
-                            "result": result.__dict__ if hasattr(result, '__dict__') else result,
-                        }
-                        st.session_state["nova_act_results"].append(entry)
-                        _cog("✓", f"Audit complete — risk: {getattr(result, 'risk_level', 'N/A')}", "ok")
-                    except Exception as e:
-                        st.error(f"Audit failed: {e}")
-                        _cog("✗", f"Nova Act error: {e}", "err")
+        _render_nova_act_run_fragment(audit_address, audit_type)
 
         # ── Display Results ────────────────────────────
         results = st.session_state.get("nova_act_results", [])
@@ -4275,44 +4485,7 @@ with tab_voice:
             )
         with vc_col2:
             st.markdown("<br>", unsafe_allow_html=True)
-            voice_btn = st.button("🎤 Send", key="btn_voice_send", type="primary")
-
-        if voice_btn and voice_text:
-            with st.spinner("🎙️ Processing with Nova Sonic…"):
-                _cog("🎤", f"Voice command: {voice_text[:40]}…", "info")
-                try:
-                    response = _NOVA_SONIC.process_voice_text(
-                        voice_text,
-                        context={
-                            "portfolio_value": st.session_state.get("total_capital_usd", 10000),
-                            "session_pnl": st.session_state.get("session_pnl", 0),
-                            "trade_count": st.session_state.get("trade_count", 0),
-                            "kill_switch": st.session_state.get("kill_switch_active", False),
-                            "regime": st.session_state.get("market_regime", "UNCERTAIN"),
-                            "latest_decision": st.session_state.get("latest_decision"),
-                        }
-                    )
-
-                    entry = {
-                        "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
-                        "command": voice_text,
-                        "intent": getattr(response, 'intent_handled', 'unknown') if hasattr(response, 'intent_handled') else response.get('intent_handled', 'unknown'),
-                        "response_text": getattr(response, 'text', str(response)) if hasattr(response, 'text') else response.get('text', str(response)),
-                        "success": getattr(response, 'success', True) if hasattr(response, 'success') else response.get('success', True),
-                    }
-                    st.session_state["nova_voice_history"].append(entry)
-
-                    # Handle kill_switch intent
-                    intent = entry["intent"]
-                    if intent == "kill_switch":
-                        st.session_state["kill_switch_active"] = True
-                        st.session_state["autonomous_mode"] = False
-                        _cog("⛔", "Voice command triggered KILL SWITCH", "err")
-
-                    _cog("✓", f"Voice response: {entry['response_text'][:60]}…", "ok")
-                except Exception as e:
-                    st.error(f"Voice processing failed: {e}")
-                    _cog("✗", f"Nova Sonic error: {e}", "err")
+            _render_voice_send_fragment(voice_text)
 
         # ── Quick Action Buttons ───────────────────────
         st.markdown("#### ⚡ Quick Voice Commands")
@@ -4367,22 +4540,7 @@ with tab_voice:
         with al_col2:
             alert_sev = st.selectbox("Severity", ["low", "medium", "high", "critical"],
                                      index=2, key="alert_severity")
-        if st.button("🔊 Generate Alert", key="btn_gen_alert"):
-            if alert_msg:
-                with st.spinner("Generating voice alert…"):
-                    try:
-                        alert_resp = _NOVA_SONIC.generate_alert(alert_sev, {"message": alert_msg})
-                        alert_text = getattr(alert_resp, 'text', str(alert_resp)) if hasattr(alert_resp, 'text') else alert_resp.get('text', str(alert_resp))
-                        st.session_state["nova_voice_history"].append({
-                            "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
-                            "command": f"[ALERT:{alert_sev.upper()}] {alert_msg}",
-                            "intent": "alert",
-                            "response_text": alert_text,
-                            "success": True,
-                        })
-                        _cog("🚨", f"Alert generated: {alert_text[:60]}…", "err" if alert_sev in ("high", "critical") else "info")
-                    except Exception as e:
-                        st.error(str(e))
+        _render_voice_alert_fragment(alert_msg, alert_sev)
 
         st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 
@@ -4452,23 +4610,7 @@ with tab_multimodal:
                 placeholder="Example: SafeMoon 2.0 — 1000x guaranteed returns! Locked liquidity for 1 week. Dev team anonymous.",
                 key="embed_text_input",
             )
-            if st.button("🔍 Analyze Text", key="btn_embed_text", type="primary"):
-                if embed_text:
-                    with st.spinner("🧠 Analyzing with Nova Embeddings…"):
-                        _cog("🖼️", "Running multimodal text analysis…", "info")
-                        try:
-                            result = _NOVA_EMBED.analyze_text(embed_text)
-                            entry = {
-                                "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
-                                "mode": "text",
-                                "input_preview": embed_text[:80],
-                                "result": result.__dict__ if hasattr(result, '__dict__') else result,
-                            }
-                            st.session_state["nova_embed_results"].append(entry)
-                            _cog("✓", f"Text analysis — risk: {getattr(result, 'risk_label', 'N/A')}", "ok")
-                        except Exception as e:
-                            st.error(f"Analysis failed: {e}")
-                            _cog("✗", f"Embeddings error: {e}", "err")
+            _render_multimodal_actions_fragment(embed_mode, embed_text, "", "", "", "")
 
         elif embed_mode == "🖼️ Image Analysis":
             st.markdown("#### 🖼️ Image Scam Detection")
@@ -4484,22 +4626,7 @@ with tab_multimodal:
                 placeholder="https://example.com/token-logo.png",
                 key="embed_img_input",
             )
-            if st.button("🔍 Analyze Image", key="btn_embed_img", type="primary"):
-                if img_url:
-                    with st.spinner("🖼️ Analyzing image with Nova Embeddings…"):
-                        _cog("🖼️", "Running multimodal image analysis…", "info")
-                        try:
-                            result = _NOVA_EMBED.analyze_image(img_url.encode("utf-8"), context=img_url)
-                            entry = {
-                                "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
-                                "mode": "image",
-                                "input_preview": img_url[:80],
-                                "result": result.__dict__ if hasattr(result, '__dict__') else result,
-                            }
-                            st.session_state["nova_embed_results"].append(entry)
-                            _cog("✓", f"Image analysis — risk: {getattr(result, 'risk_label', 'N/A')}", "ok")
-                        except Exception as e:
-                            st.error(f"Analysis failed: {e}")
+            _render_multimodal_actions_fragment(embed_mode, "", img_url, "", "", "")
 
         elif embed_mode == "🔍 Logo Comparison":
             st.markdown("#### 🔍 Logo Comparison (Fake Token Detection)")
@@ -4508,21 +4635,7 @@ with tab_multimodal:
                 logo_url1 = st.text_input("Reference Logo URL", placeholder="Official Uniswap logo URL", key="logo1")
             with lc2:
                 logo_url2 = st.text_input("Suspect Logo URL", placeholder="Suspicious token logo URL", key="logo2")
-            if st.button("🔍 Compare Logos", key="btn_compare_logos", type="primary"):
-                if logo_url1 and logo_url2:
-                    with st.spinner("🔍 Comparing logos…"):
-                        try:
-                            result = _NOVA_EMBED.compare_logos(logo_url1.encode("utf-8"), reference_name=logo_url2)
-                            entry = {
-                                "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
-                                "mode": "logo_compare",
-                                "input_preview": f"{logo_url1[:30]}… vs {logo_url2[:30]}…",
-                                "result": result.__dict__ if hasattr(result, '__dict__') else result,
-                            }
-                            st.session_state["nova_embed_results"].append(entry)
-                            _cog("✓", f"Logo comparison complete", "ok")
-                        except Exception as e:
-                            st.error(f"Comparison failed: {e}")
+            _render_multimodal_actions_fragment(embed_mode, "", "", logo_url1, logo_url2, "")
 
         else:  # Chart Analysis
             st.markdown("#### 📊 Chart Pattern Analysis")
@@ -4531,21 +4644,7 @@ with tab_multimodal:
                 placeholder="URL to a trading chart screenshot",
                 key="chart_url_input",
             )
-            if st.button("🔍 Analyze Chart", key="btn_chart_analyze", type="primary"):
-                if chart_url:
-                    with st.spinner("📊 Analyzing chart pattern…"):
-                        try:
-                            result = _NOVA_EMBED.analyze_chart(chart_url.encode("utf-8"))
-                            entry = {
-                                "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
-                                "mode": "chart",
-                                "input_preview": chart_url[:80],
-                                "result": result.__dict__ if hasattr(result, '__dict__') else result,
-                            }
-                            st.session_state["nova_embed_results"].append(entry)
-                            _cog("✓", f"Chart analysis — risk: {getattr(result, 'risk_label', 'N/A')}", "ok")
-                        except Exception as e:
-                            st.error(f"Analysis failed: {e}")
+            _render_multimodal_actions_fragment(embed_mode, "", "", "", "", chart_url)
 
         st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 
