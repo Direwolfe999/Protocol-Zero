@@ -138,6 +138,11 @@ def _process_command(command: str) -> None:
 	ctx = _voice_context()
 	st.session_state["voice_session"]["thinking"] = True
 	st.session_state["voice_session"]["state"] = "thinking"
+	
+	# Show premium thinking indicator
+	thinking_placeholder = st.empty()
+	with thinking_placeholder.container():
+		st.markdown(core.render_voice_thinking(), unsafe_allow_html=True)
 	st.session_state["voice_session"]["speaking"] = False
 	core.cog("🎙️", f"War Room command: {command[:48]}", "info")
 	try:
@@ -145,9 +150,14 @@ def _process_command(command: str) -> None:
 		if not (isinstance(stream_result, tuple) and len(stream_result) == 2):
 			stream_result = _backup_stream_voice(command, context=ctx, max_tokens=140)
 		stream_gen, meta = stream_result
+		thinking_placeholder.empty()  # Clear thinking indicator
 		st.markdown("#### 🧠 Streaming Response")
 		st.session_state["voice_session"]["thinking"] = False
 		st.session_state["voice_session"]["state"] = "speaking"
+		
+		# Show futuristic waveform while speaking
+		st.markdown(core.render_voice_waveform(12), unsafe_allow_html=True)
+		
 		response_text = st.write_stream(_stream_chunks(stream_gen))
 		latency_ms = round((time.perf_counter() - t0) * 1000)
 		intent = "unknown"
@@ -162,6 +172,8 @@ def _process_command(command: str) -> None:
 			"command": command,
 			"intent": intent,
 			"response_text": response_text,
+			"confidence": conf,
+			"latency_ms": latency_ms,
 			"success": True,
 		}
 		st.session_state["nova_voice_history"].append(entry)

@@ -851,6 +851,253 @@ section[data-testid="stSidebar"] {
 }
 
 /* ══════════════════════════════════════════════════════════
+   PREMIUM VOICE AI — Futuristic NovaSonic Interface
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Premium Execute Button ── */
+.voice-exec-btn {
+    background: linear-gradient(135deg, #4fc3f7 0%, #29b6f6 50%, #0288d1 100%) !important;
+    border: 2px solid rgba(79,195,247,.7) !important;
+    color: #ffffff !important;
+    border-radius: 12px !important;
+    padding: 0.75rem 1.5rem !important;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    box-shadow: 0 8px 24px rgba(79,195,247,.25), inset 0 1px 2px rgba(255,255,255,.25) !important;
+    position: relative;
+    overflow: hidden;
+}
+.voice-exec-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.3), transparent);
+    opacity: 0;
+    animation: shimmer 2s ease-in-out infinite;
+    pointer-events: none;
+}
+@keyframes shimmer {
+    0%, 100% { opacity: 0; transform: translateX(-100%); }
+    50% { opacity: 1; transform: translateX(100%); }
+}
+.voice-exec-btn:hover {
+    background: linear-gradient(135deg, #64ffda 0%, #4fc3f7 50%, #29b6f6 100%) !important;
+    border-color: #64ffda !important;
+    box-shadow: 0 16px 48px rgba(100,255,218,.35), 0 0 24px rgba(79,195,247,.4), inset 0 1px 2px rgba(255,255,255,.3) !important;
+    transform: translateY(-2px) scale(1.02) !important;
+}
+.voice-exec-btn:active {
+    transform: translateY(0) scale(0.98) !important;
+    box-shadow: 0 4px 12px rgba(100,255,218,.25), inset 0 2px 4px rgba(0,0,0,.3) !important;
+}
+
+/* ── Premium Quick Command Buttons ── */
+.voice-quick-btn {
+    background: linear-gradient(135deg, #0c0c1f 0%, #111130 100%) !important;
+    border: 1.5px solid rgba(100,255,218,.45) !important;
+    color: #9eeeff !important;
+    border-radius: 10px !important;
+    padding: 0.65rem 1rem !important;
+    font-weight: 600 !important;
+    font-size: 0.85rem !important;
+    letter-spacing: 0.5px !important;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    box-shadow: 0 6px 16px rgba(100,255,218,.1), inset 0 1px 0 rgba(255,255,255,.12) !important;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    overflow: hidden;
+}
+.voice-quick-btn::after {
+    content: '';
+    position: absolute;
+    width: 120%;
+    height: 100%;
+    top: 0;
+    left: -120%;
+    background: linear-gradient(90deg, transparent, rgba(100,255,218,.2), transparent);
+    transform: skewX(-20deg);
+    transition: transform 0.6s;
+}
+.voice-quick-btn:hover {
+    border-color: rgba(100,255,218,.8) !important;
+    color: #ecfeff !important;
+    background: linear-gradient(135deg, #0d1420 0%, #111130 100%) !important;
+    transform: translateY(-2px) scale(1.03) !important;
+    box-shadow: 0 12px 32px rgba(100,255,218,.2), inset 0 1px 2px rgba(255,255,255,.15) !important;
+}
+.voice-quick-btn:hover::after { transform: translateX(130%); }
+.voice-quick-btn[data-voice-tone="kill"] {
+    border-color: rgba(248,113,113,.65) !important;
+    color: #fecaca !important;
+    background: linear-gradient(135deg, rgba(39,12,22,.95), rgba(26,7,14,.92)) !important;
+    box-shadow: 0 6px 16px rgba(248,113,113,.15), inset 0 1px 0 rgba(255,255,255,.08) !important;
+}
+.voice-quick-btn[data-voice-tone="kill"]::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at center, rgba(254,202,202,.15), rgba(248,113,113,.08));
+    animation: killGlow 1.5s ease-in-out infinite;
+    pointer-events: none;
+}
+@keyframes killGlow {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+.voice-quick-btn[data-voice-tone="kill"]:hover {
+    border-color: rgba(252,165,165,.9) !important;
+    color: #fef2f2 !important;
+    box-shadow: 0 12px 32px rgba(239,68,68,.25), inset 0 1px 2px rgba(255,255,255,.1) !important;
+    transform: translateY(-2px) scale(1.03) !important;
+}
+
+/* ── Futuristic Voice Waveform/Indicator ── */
+.voice-waveform-container {
+    width: 100%;
+    height: 60px;
+    background: linear-gradient(180deg, rgba(79,195,247,.08), rgba(100,255,218,.05));
+    border: 1px solid rgba(79,195,247,.2);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0.8rem;
+    margin: 0.8rem 0;
+    overflow: hidden;
+    position: relative;
+}
+.voice-waveform-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(ellipse at center, rgba(100,255,218,.1), transparent);
+    pointer-events: none;
+}
+.voice-bar {
+    width: 3px;
+    background: linear-gradient(180deg, #4fc3f7, #64ffda);
+    border-radius: 2px;
+    flex-shrink: 0;
+    animation: voiceBar 0.4s ease-in-out infinite;
+    box-shadow: 0 0 8px rgba(100,255,218,.4);
+}
+@keyframes voiceBar {
+    0%, 100% { height: 8px; opacity: 0.5; }
+    50% { height: 35px; opacity: 1; }
+}
+.voice-bar:nth-child(1) { animation-delay: 0s; }
+.voice-bar:nth-child(2) { animation-delay: 0.1s; }
+.voice-bar:nth-child(3) { animation-delay: 0.2s; }
+.voice-bar:nth-child(4) { animation-delay: 0.1s; }
+.voice-bar:nth-child(5) { animation-delay: 0s; }
+
+/* ── Thinking State Animation (Neural Pulse) ── */
+.voice-thinking {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.8rem 1.2rem;
+    background: linear-gradient(135deg, rgba(79,195,247,.1), rgba(100,255,218,.05));
+    border: 1px solid rgba(79,195,247,.3);
+    border-radius: 10px;
+    font-size: 0.9rem;
+    color: #64ffda;
+}
+.voice-thinking-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #64ffda;
+    animation: neuroPulse 1.2s ease-in-out infinite;
+}
+.voice-thinking-dot:nth-child(1) { animation-delay: 0s; }
+.voice-thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+.voice-thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes neuroPulse {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* ── Voice Progress Bar ── */
+.voice-progress {
+    width: 100%;
+    height: 8px;
+    background: linear-gradient(90deg, #0c0c1f, #111130);
+    border: 1px solid rgba(79,195,247,.2);
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    margin: 0.6rem 0;
+}
+.voice-progress::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(100,255,218,.3), transparent);
+    animation: progressShine 2s ease-in-out infinite;
+}
+@keyframes progressShine {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+.voice-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4fc3f7 0%, #64ffda 50%, #29b6f6 100%);
+    border-radius: 10px;
+    width: 0%;
+    transition: width 0.3s ease;
+    box-shadow: 0 0 16px rgba(100,255,218,.5);
+    position: relative;
+    z-index: 2;
+}
+
+/* ── Command Card with Premium Styling ── */
+.voice-command-card {
+    background: linear-gradient(135deg, #0c0c1f 0%, #111130 100%);
+    border: 1px solid rgba(79,195,247,.3);
+    border-left: 3px solid #64ffda;
+    border-radius: 12px;
+    padding: 1rem 1.2rem;
+    margin: 0.6rem 0;
+    transition: all 0.3s;
+}
+.voice-command-card:hover {
+    border-color: rgba(79,195,247,.6);
+    box-shadow: 0 8px 24px rgba(79,195,247,.15);
+    transform: translateX(4px);
+}
+
+/* ── Response Text with Streaming Animation ── */
+.voice-response-text {
+    color: #ccd6f6;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    animation: streamIn 0.3s ease-out;
+}
+@keyframes streamIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ══════════════════════════════════════════════════════════
    UTILITY — Smooth font scaling with clamp() for fluidity
    ══════════════════════════════════════════════════════════ */
 .mcard .val    {
@@ -2082,6 +2329,47 @@ def render_top_row(df: pd.DataFrame) -> str:
         st.markdown("##### 🧬 Trade DNA")
         st.markdown(trade_dna_html(st.session_state.get("decision_history", [])), unsafe_allow_html=True)
     return regime
+
+
+def render_voice_waveform(num_bars: int = 12) -> str:
+    """Render futuristic voice waveform visualization"""
+    bars_html = "".join(f'<div class="voice-bar"></div>' for _ in range(num_bars))
+    return f'<div class="voice-waveform-container">{bars_html}</div>'
+
+
+def render_voice_thinking() -> str:
+    """Render neural pulse thinking indicator"""
+    return """<div class="voice-thinking">
+        <span>🧠 Processing Neural Intent…</span>
+        <div class="voice-thinking-dot"></div>
+        <div class="voice-thinking-dot"></div>
+        <div class="voice-thinking-dot"></div>
+    </div>"""
+
+
+def render_voice_progress(percentage: float) -> str:
+    """Render animated voice progress bar"""
+    pct = max(0, min(100, percentage))
+    return f"""<div class="voice-progress">
+        <div class="voice-progress-fill" style="width: {pct}%"></div>
+    </div>"""
+
+
+def render_voice_command_card(intent: str, command: str, confidence: float) -> str:
+    """Render premium command card with confidence indicator"""
+    conf_pct = max(0, min(100, int(confidence * 100)))
+    conf_color = "#64ffda" if confidence >= 0.7 else ("#ffd93d" if confidence >= 0.5 else "#ff6b6b")
+    
+    return f"""<div class="voice-command-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+            <span style="font-weight:600;color:#9eeeff;text-transform:uppercase;font-size:0.75rem;letter-spacing:1px">{intent}</span>
+            <span style="color:{conf_color};font-weight:700;font-family:'JetBrains Mono';;font-size:0.85rem">{conf_pct}%</span>
+        </div>
+        <div class="voice-response-text">{command}</div>
+        <div class="voice-progress" style="margin-top:0.6rem">
+            <div class="voice-progress-fill" style="width: {conf_pct}%"></div>
+        </div>
+    </div>"""
 
 
 def render_panel_nav(current_label: str) -> None:
