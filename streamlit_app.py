@@ -58,6 +58,15 @@ if not st.session_state.get("_app_initialized", False):
 	st.session_state["_app_initialized"] = True
 	st.session_state["_intro_completed"] = False
 
+# Show intro if not completed
+if not st.session_state.get("_intro_completed", False) and st.query_params.get("skip_intro") != "true":
+	import app_core as core
+	core.render_intro_screen()
+	st.session_state["_intro_completed"] = True
+	st.stop()
+elif st.query_params.get("skip_intro") == "true":
+	st.session_state["_intro_completed"] = True
+
 pages = [
 	st.Page("pages/00_Dashboard.py", title="🛡️ Dashboard", icon="🛡️"),
 	st.Page("pages/01_Market.py", title="📊 Market", icon="📊"),
