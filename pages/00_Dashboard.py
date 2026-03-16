@@ -5,11 +5,14 @@ import streamlit as st
 import app_core as core
 
 
+# Show intro screen once per session
+if not st.session_state.get("_intro_completed", False):
+    core.render_intro_screen()
+    st.session_state["_intro_completed"] = True
+    st.stop()
+
 df = core.render_shell(show_top_row=True)
 flags = core.module_flags()
-
-st.markdown("### 🏠 Operations Dashboard")
-st.caption("Multipage home with shared runtime state and real-time controls")
 
 st.markdown("#### Panels")
 core.render_panel_nav(str(st.session_state.get("active_panel", "📊  Market")))

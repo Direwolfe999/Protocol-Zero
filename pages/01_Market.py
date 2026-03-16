@@ -41,6 +41,28 @@ with col_live:
 		key="market_refresh_slider",
 	)
 
+# What-If Volatility Simulator
+st.markdown("---")
+col_vol, col_info = st.columns([2, 3])
+with col_vol:
+	st.session_state["whatif_vol_mult"] = st.slider(
+		"📊 What-If Volatility Multiplier",
+		min_value=0.5,
+		max_value=2.5,
+		value=float(st.session_state.get("whatif_vol_mult", 1.0)),
+		step=0.1,
+		key="vol_mult_slider",
+		help="Simulate market conditions at different volatility levels. Affects risk calculations, regime detection, and confidence scores.",
+	)
+with col_info:
+	vol_mult = st.session_state.get("whatif_vol_mult", 1.0)
+	if vol_mult < 1.0:
+		st.info(f"🟢 **Calm Market**: {vol_mult}x volatility (lower risk, wider spreads)")
+	elif vol_mult > 1.0:
+		st.warning(f"🔴 **Volatile Market**: {vol_mult}x volatility (higher risk, tighter spreads)")
+	else:
+		st.success("⚪ **Normal Market**: 1.0x volatility (baseline)")
+
 latest = df["close"].iloc[-1]
 prev = df["close"].iloc[-2]
 change = ((latest - prev) / prev) * 100

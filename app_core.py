@@ -4,6 +4,7 @@ import gc
 import hashlib
 import json
 import logging
+import math
 import os
 import pathlib
 import re
@@ -897,101 +898,97 @@ button[data-baseweb="tab"][aria-selected="true"] {
 [data-testid="stSegmentedControl"],
 [data-testid="stRadio"] {
     position: relative;
+    width: 100%;
 }
 
 [data-testid="stSegmentedControl"] [role="radiogroup"] {
-    display: flex !important;
-    flex-wrap: nowrap !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    white-space: nowrap !important;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
     gap: 0 !important;
-    border: 1px solid rgba(79,195,247,.22) !important;
-    border-bottom: 1px solid rgba(79,195,247,.30) !important;
-    border-radius: 12px !important;
-    background: linear-gradient(180deg, rgba(12,12,31,.60), rgba(10,10,26,.48)) !important;
-    backdrop-filter: blur(8px) saturate(120%);
-    padding: 0 .35rem 0 .35rem !important;
+    border-bottom: 1px solid rgba(79,195,247,.20) !important;
 }
-[data-testid="stSegmentedControl"] [role="radiogroup"]::-webkit-scrollbar { display: none; }
-[data-testid="stSegmentedControl"] [role="radio"] {
-    flex: 0 0 auto !important;
-    white-space: nowrap !important;
-    padding: 0.48rem 0.70rem !important;
-    margin: 0 !important;
+[data-testid="stSegmentedControl"] [data-baseweb="button-group"],
+[data-testid="stSegmentedControl"] div[role="group"] {
     gap: 0 !important;
+    border-bottom: 1px solid rgba(79,195,247,.20) !important;
+}
+[data-testid="stSegmentedControl"] [role="radio"] {
+    font-size: clamp(0.68rem, 0.95vw, 0.82rem) !important;
+    padding: clamp(0.4rem, 0.7vw, 0.5rem) clamp(0.52rem, 1.1vw, 0.72rem) !important;
     border: none !important;
     border-bottom: 2px solid transparent !important;
     border-radius: 0 !important;
     background: transparent !important;
     color: #b7c6f2 !important;
     box-shadow: none !important;
+    line-height: 1.2 !important;
+    letter-spacing: 0.3px !important;
+}
+[data-testid="stSegmentedControl"] button {
+    font-size: clamp(0.68rem, 0.95vw, 0.82rem) !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: #b7c6f2 !important;
+    box-shadow: none !important;
+    line-height: 1.2 !important;
 }
 [data-testid="stSegmentedControl"] [role="radio"][aria-checked="true"] {
     color: #ffffff !important;
-    border-bottom: 3px solid #64ffda !important;
-    box-shadow: inset 0 -1px 0 rgba(100,255,218,.35) !important;
-    font-weight: 700 !important;
+    border-bottom: 4px solid #64ffda !important;
+    font-weight: 800 !important;
+    box-shadow: inset 0 -2px 0 rgba(100,255,218,0.4) !important;
+}
+[data-testid="stSegmentedControl"] button[aria-pressed="true"],
+[data-testid="stSegmentedControl"] button[aria-selected="true"] {
+    color: #ffffff !important;
+    border-bottom: 4px solid #64ffda !important;
+    font-weight: 800 !important;
+    box-shadow: inset 0 -2px 0 rgba(100,255,218,0.4) !important;
 }
 
 [data-testid="stRadio"] [role="radiogroup"] {
-    display: flex !important;
-    flex-wrap: nowrap !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    white-space: nowrap !important;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
     gap: 0 !important;
-    border: 1px solid rgba(79,195,247,.22) !important;
-    border-bottom: 1px solid rgba(79,195,247,.30) !important;
-    border-radius: 12px !important;
-    background: linear-gradient(180deg, rgba(12,12,31,.60), rgba(10,10,26,.48)) !important;
-    backdrop-filter: blur(8px) saturate(120%);
-    padding: 0 .35rem 0 .35rem !important;
+    border-bottom: 1px solid rgba(79,195,247,.20) !important;
 }
-[data-testid="stRadio"] [role="radiogroup"]::-webkit-scrollbar { display: none; }
 [data-testid="stRadio"] [role="radio"] {
-    flex: 0 0 auto !important;
-    white-space: nowrap !important;
-    padding: 0.48rem 0.70rem !important;
+    font-size: clamp(0.68rem, 0.95vw, 0.82rem) !important;
+    padding: clamp(0.4rem, 0.7vw, 0.5rem) clamp(0.52rem, 1.1vw, 0.72rem) !important;
     margin: 0 !important;
     border: none !important;
     border-bottom: 2px solid transparent !important;
     border-radius: 0 !important;
     background: transparent !important;
     color: #b7c6f2 !important;
+    line-height: 1.2 !important;
+    letter-spacing: 0.3px !important;
 }
 [data-testid="stRadio"] [role="radio"][aria-checked="true"] {
     color: #ffffff !important;
-    border-bottom: 3px solid #64ffda !important;
-    box-shadow: inset 0 -1px 0 rgba(100,255,218,.35) !important;
-    font-weight: 700 !important;
+    border-bottom: 4px solid #64ffda !important;
+    font-weight: 800 !important;
+    box-shadow: inset 0 -2px 0 rgba(100,255,218,0.4) !important;
 }
 
 .pz-nav-chev {
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     border-radius: 999px;
     border: 1px solid rgba(79,195,247,.35);
-    background: rgba(6,6,18,.72);
+    background: rgba(6,6,18,.78);
     color: #9eeeff;
     font-weight: 700;
-    font-size: 14px;
+    font-size: 12px;
     line-height: 1;
     display: none;
     align-items: center;
     justify-content: center;
     z-index: 5;
 }
-.pz-nav-chev:hover { border-color: #64ffda; color: #64ffda; }
-.pz-nav-chev.left { left: 6px; }
-.pz-nav-chev.right { right: 6px; }
+.pz-nav-chev.left { left: 4px; }
+.pz-nav-chev.right { right: 4px; }
 
 [data-testid="stSegmentedControl"].pz-overflow-left .pz-nav-chev.left,
 [data-testid="stSegmentedControl"].pz-overflow-right .pz-nav-chev.right,
@@ -1007,11 +1004,25 @@ button[data-baseweb="tab"][aria-selected="true"] {
     min-height: 40px;
 }
 
+@media (max-width: 1024px) {
+    [data-testid="stSegmentedControl"] [role="radio"],
+    [data-testid="stRadio"] [role="radio"],
+    [data-testid="stSegmentedControl"] button,
+    [data-testid="stRadio"] button {
+        font-size: 0.78rem !important;
+        padding: 0.42rem 0.55rem !important;
+        line-height: 1.15 !important;
+    }
+}
+
 @media (max-width: 768px) {
     [data-testid="stSegmentedControl"] [role="radio"],
-    [data-testid="stRadio"] [role="radio"] {
-        padding: 0.42rem 0.58rem !important;
-        font-size: .82rem !important;
+    [data-testid="stRadio"] [role="radio"],
+    [data-testid="stSegmentedControl"] button,
+    [data-testid="stRadio"] button {
+        padding: 0.38rem 0.45rem !important;
+        font-size: .74rem !important;
+        line-height: 1.1 !important;
     }
 
     [data-testid="stButton"] > button {
@@ -1027,6 +1038,8 @@ button[data-baseweb="tab"][aria-selected="true"] {
     [data-testid="stSelectbox"] input {
         font-size: 0.9rem !important;
     }
+
+    .pz-nav-chev { display: none !important; }
 
 }
 
@@ -1145,30 +1158,34 @@ window.addEventListener('error', function (e) {
 (function() {
     const STEP = 220;
 
+    function findGroup(container) {
+        if (!container) return null;
+        return (
+            container.querySelector('[role="radiogroup"]') ||
+            container.querySelector('[data-baseweb="button-group"]') ||
+            container.querySelector('div[role="group"]')
+        );
+    }
+
     function ensureChevron(container, side) {
-        const cls = `pz-nav-chev ${side}`;
         let btn = container.querySelector(`.pz-nav-chev.${side}`);
         if (!btn) {
             btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = cls;
+            btn.className = `pz-nav-chev ${side}`;
             btn.setAttribute('aria-label', side === 'left' ? 'Scroll left' : 'Scroll right');
-            btn.innerText = side === 'left' ? '‹' : '›';
+            btn.innerHTML = side === 'left' ? '&#10094;' : '&#10095;';
             container.appendChild(btn);
         }
         return btn;
     }
 
-    function wireContainer(container) {
-        if (!container) return;
-        const group = container.querySelector('[role="radiogroup"]');
-        if (!group) return;
-
+    function wire(container, group) {
         const leftBtn = ensureChevron(container, 'left');
         const rightBtn = ensureChevron(container, 'right');
 
         function refresh() {
-            const overflow = group.scrollWidth > (group.clientWidth + 2);
+            const overflow = group.scrollWidth > group.clientWidth + 2;
             container.classList.remove('pz-overflow-left', 'pz-overflow-right');
             if (!overflow) return;
             if (group.scrollLeft > 3) container.classList.add('pz-overflow-left');
@@ -1182,7 +1199,6 @@ window.addEventListener('error', function (e) {
             });
             leftBtn.dataset.wired = '1';
         }
-
         if (!rightBtn.dataset.wired) {
             rightBtn.addEventListener('click', function(e) {
                 e.preventDefault();
@@ -1191,18 +1207,26 @@ window.addEventListener('error', function (e) {
             rightBtn.dataset.wired = '1';
         }
 
-        if (!group.dataset.wired) {
+        if (!group.dataset.pzWired) {
             group.addEventListener('scroll', refresh, { passive: true });
             window.addEventListener('resize', refresh, { passive: true });
-            group.dataset.wired = '1';
+            group.dataset.pzWired = '1';
         }
-
         refresh();
         setTimeout(refresh, 120);
     }
 
     function run() {
-        document.querySelectorAll('[data-testid="stSegmentedControl"], [data-testid="stRadio"]').forEach(wireContainer);
+        document.querySelectorAll('[data-testid="stSegmentedControl"], [data-testid="stRadio"]').forEach(function(container){
+            const group = findGroup(container);
+            if (!group) return;
+            group.style.display = 'flex';
+            group.style.flexWrap = 'nowrap';
+            group.style.overflowX = 'auto';
+            group.style.overflowY = 'hidden';
+            group.style.whiteSpace = 'nowrap';
+            wire(container, group);
+        });
     }
 
     run();
@@ -1213,6 +1237,189 @@ window.addEventListener('error', function (e) {
 """,
         unsafe_allow_html=True,
     )
+
+
+_INTRO_SLIDES = [
+    {
+        "icon": "🛡️",
+        "title": "Welcome to Protocol Zero",
+        "subtitle": "Autonomous · Trust-Minimized · On-Chain Accountable",
+        "body": (
+            "Protocol Zero is an AI-powered DeFi trading agent that combines "
+            "Amazon Nova intelligence with cryptographic accountability. "
+            "Every decision is signed, risk-gated, and logged on-chain."
+        ),
+        "features": [],
+        "gradient": "linear-gradient(135deg, #0a0a2e 0%, #1a0a3e 50%, #0a1a3e 100%)",
+    },
+    {
+        "icon": "🧠",
+        "title": "AI Reasoning Engine",
+        "subtitle": "Amazon Nova Lite · Agentic Tool-Use Loop",
+        "body": "The brain fetches live OHLCV data, builds market context, and calls Nova Lite with 4 tools for deep analysis.",
+        "features": [
+            ("🧠", "Nova Brain", "Agentic Converse API with tool-use loop for market reasoning"),
+            ("🔬", "Nova Embeddings", "Multimodal scam-pattern detection via cosine similarity"),
+            ("🎙️", "Nova Voice", "Text intelligence for voice commands + Web Speech API"),
+            ("🔍", "Nova Act Auditor", "Browser-based smart contract security audits"),
+        ],
+        "gradient": "linear-gradient(135deg, #0a0a2e 0%, #0a2a3e 50%, #0a1a2e 100%)",
+    },
+    {
+        "icon": "🛡️",
+        "title": "Risk Management Pipeline",
+        "subtitle": "6-Layer Fail-Closed Gate · Capital Preservation First",
+        "body": "Every trade passes through 6 independent risk checks. If ANY check is uncertain, the trade is blocked.",
+        "features": [
+            ("⚖️", "Position Size Gate", "Caps single-trade exposure at $500"),
+            ("📉", "Daily Loss Limit", "Halts trading at -$1,000 cumulative daily loss"),
+            ("⏱️", "Trade Frequency", "Max 10 trades per rolling hour"),
+            ("🎯", "Concentration", "Max 30% capital in a single asset"),
+            ("🔮", "Confidence Floor", "Rejects low-confidence AI signals (< 40%)"),
+            ("⏰", "Intent Expiry", "Stale intents auto-rejected after 5 minutes"),
+        ],
+        "gradient": "linear-gradient(135deg, #0a0a2e 0%, #2a0a1e 50%, #1a0a2e 100%)",
+    },
+    {
+        "icon": "🔏",
+        "title": "Cryptographic Accountability",
+        "subtitle": "EIP-712 · ERC-8004 · Merkle Audit Trail",
+        "body": "Every decision is cryptographically signed and logged on-chain — creating an immutable proof of reasoning.",
+        "features": [
+            ("🔏", "EIP-712 Signing", "Typed data signatures for every trade intent"),
+            ("🆔", "Identity Registry", "Agent mints an ERC-721 NFT on-chain"),
+            ("⭐", "Reputation Registry", "Trade outcomes logged via giveFeedback()"),
+            ("📋", "Validation Artifacts", "Keccak256-hashed audit trail with Merkle root"),
+        ],
+        "gradient": "linear-gradient(135deg, #0a0a2e 0%, #1a1a0e 50%, #0a2a1e 100%)",
+    },
+    {
+        "icon": "📊",
+        "title": "Live Dashboard Features",
+        "subtitle": "14 Interactive Tabs · Real-Time Analytics",
+        "body": "Monitor everything in real time — from AI reasoning to on-chain transactions.",
+        "features": [
+            ("🧠", "Cognitive Stream", "Live AI thought feed as decisions unfold"),
+            ("🌌", "Market Regime Orb", "Animated sphere showing market state"),
+            ("🧬", "Trade DNA", "Visual fingerprint of each trade's characteristics"),
+            ("📊", "Performance Analytics", "Sharpe, Sortino, Calmar ratios + equity curve"),
+            ("🔮", "What-If Simulator", "Stress-test with volatility multiplier"),
+            ("⛓️", "DEX Execution", "Live Uniswap V3 swap execution"),
+        ],
+        "gradient": "linear-gradient(135deg, #0a0a2e 0%, #0a1a3e 50%, #1a0a2e 100%)",
+    },
+]
+
+
+def render_intro_screen() -> None:
+    """Render cinematic onboarding walkthrough with 5 slides."""
+    import json as _json
+    import streamlit.components.v1 as _components
+
+    total = len(_INTRO_SLIDES)
+
+    st.markdown("""<style>
+    section[data-testid="stSidebar"],header[data-testid="stHeader"],
+    #MainMenu,footer,.stDeployButton,.stApp>header{display:none!important}
+    .stApp, html, body, section.main,
+    div[data-testid="stAppViewContainer"],
+    div[data-testid="stAppViewBlockContainer"],
+    .stMainBlockContainer, .block-container {
+        background-color: #0a0a1a !important;
+        background: #0a0a1a !important;
+    }
+    .block-container,.stMainBlockContainer,
+    div[data-testid="stAppViewBlockContainer"],
+    div[data-testid="stAppViewContainer"],
+    div[data-testid="stVerticalBlock"],
+    .main .block-container,section.main>div,.stApp>div,section.main,
+    .appview-container,.main>.block-container{
+        padding:0!important;margin:0!important;max-width:100%!important
+    }
+    .stApp [data-testid="stAppViewContainer"],
+    .stApp [data-testid="stVerticalBlockBorderWrapper"]{padding:0!important;margin:0!important}
+    [data-stale="true"]::before,[data-stale="true"]::after{display:none!important;content:none!important}
+    [data-stale="true"]{opacity:1!important;transition:none!important}
+    .stSpinner,.stSpinnerContainer,div[data-testid="stStatusWidget"],
+    div[data-testid="stSpinner"]{display:none!important}
+    iframe{border:none!important}
+    </style>""", unsafe_allow_html=True)
+
+    slides_json_data = []
+    for idx, sl in enumerate(_INTRO_SLIDES):
+        feats = ""
+        if sl["features"]:
+            feats = '<div class="feats">'
+            for ico, name, desc in sl["features"]:
+                feats += (f'<div class="feat"><span class="fi">{ico}</span>'
+                          f'<span class="fn">{name}</span>'
+                          f'<div class="fd">{desc}</div></div>')
+            feats += "</div>"
+        slides_json_data.append({
+            "icon": sl["icon"], "title": sl["title"],
+            "subtitle": sl["subtitle"], "body": sl["body"],
+            "feats": feats,
+        })
+
+    slides_js = _json.dumps(slides_json_data)
+
+    intro_html = f"""
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+html,body{{height:100%;overflow:hidden;background:#0a0a1a;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:#ccd6f6}}
+@keyframes fadeIn{{from{{opacity:0;transform:translateY(20px)}}to{{opacity:1;transform:translateY(0)}}}}
+@keyframes glow{{0%,100%{{text-shadow:0 0 20px rgba(100,255,218,.3)}}50%{{text-shadow:0 0 40px rgba(100,255,218,.6),0 0 80px rgba(100,255,218,.2)}}}}
+@keyframes pulse{{0%,100%{{transform:scale(1)}}50%{{transform:scale(1.05)}}}}
+@keyframes shimmer{{0%{{background-position:-200% center}}100%{{background-position:200% center}}}}
+@keyframes slideIn{{from{{opacity:0;transform:translateX(-30px)}}to{{opacity:1;transform:translateX(0)}}}}
+@keyframes dotPulse{{0%,100%{{opacity:.4;transform:scale(1)}}50%{{opacity:1;transform:scale(1.3)}}}}
+.wrap{{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 1.5rem;text-align:center}}
+.slide{{display:flex;flex-direction:column;align-items:center;animation:fadeIn .4s ease-out}}
+.icon{{font-size:3.5rem;margin-bottom:.5rem;animation:pulse 3s ease-in-out infinite}}
+.title{{font-family:'JetBrains Mono',monospace;font-size:2.3rem;font-weight:800;background:linear-gradient(135deg,#64ffda 0%,#4fc3f7 50%,#b388ff 100%);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:shimmer 4s linear infinite,glow 3s ease-in-out infinite;margin-bottom:.15rem;line-height:1.2}}
+.sub{{font-size:.92rem;color:#8892b0;font-family:'JetBrains Mono',monospace;letter-spacing:2px;text-transform:uppercase;margin-bottom:.9rem}}
+.body{{font-size:1.05rem;color:#ccd6f6;max-width:650px;line-height:1.65;margin:0 auto 1.3rem auto}}
+.feats{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.8rem;max-width:840px;width:100%;margin:0 auto 1.2rem auto}}
+.feat{{background:rgba(12,12,31,.8);border:1px solid #1a1a3e;border-radius:12px;padding:.85rem 1.1rem;text-align:left;animation:slideIn .5s ease-out both;transition:border-color .3s,transform .2s}}
+.feat:hover{{border-color:#64ffda;transform:translateY(-2px)}}
+.feat:nth-child(1){{animation-delay:.08s}}.feat:nth-child(2){{animation-delay:.12s}}.feat:nth-child(3){{animation-delay:.16s}}.feat:nth-child(4){{animation-delay:.2s}}.feat:nth-child(5){{animation-delay:.24s}}.feat:nth-child(6){{animation-delay:.28s}}
+.fi{{font-size:1.3rem;margin-right:.45rem}}.fn{{font-weight:700;color:#64ffda;font-size:.92rem}}.fd{{color:#8892b0;font-size:.8rem;margin-top:3px;line-height:1.5}}
+.dots{{display:flex;gap:10px;justify-content:center;margin:.8rem 0}}
+.dot{{width:10px;height:10px;border-radius:50%;background:#1a1a3e;transition:all .3s}}.dot.active{{background:#64ffda;box-shadow:0 0 12px rgba(100,255,218,.5);animation:dotPulse 2s ease-in-out infinite}}.dot.done{{background:#495670}}
+.nav{{display:flex;gap:.8rem;justify-content:center;margin-top:.3rem}}
+.btn{{padding:.55rem 1.8rem;border-radius:8px;border:1px solid #3ec9ad;background:transparent;color:#3ec9ad;font-family:'JetBrains Mono',monospace;font-size:.85rem;cursor:pointer;transition:all .15s;outline:none}}
+.btn:hover{{background:rgba(62,201,173,.12)}}.btn.primary{{background:#3ec9ad;color:#0a0a1a;font-weight:700;border-color:#3ec9ad}}.btn.primary:hover{{background:#36b89d;border-color:#36b89d}}
+@media(max-width:768px){{.icon{{font-size:2.5rem}}.title{{font-size:1.5rem}}.sub{{font-size:.78rem;letter-spacing:1px}}.body{{font-size:.9rem}}.feats{{grid-template-columns:1fr;gap:.5rem}}.fn{{font-size:.85rem}}.fd{{font-size:.76rem}}.fi{{font-size:1.15rem}}}}
+@media(max-width:480px){{.title{{font-size:1.2rem}}.icon{{font-size:2rem}}.body{{font-size:.82rem}}.fn{{font-size:.8rem}}.fd{{font-size:.72rem}}}}
+</style></head><body>
+<div class="wrap">
+<div class="slide" id="slide"></div>
+<div class="dots" id="dots"></div>
+<div class="nav" id="nav"></div>
+</div>
+<script>
+const slides={slides_js};
+const total=slides.length;
+let cur=0;
+function render(){{
+  const s=slides[cur];
+  document.getElementById('slide').innerHTML='<div class="icon">'+s.icon+'</div>'+'<div class="title">'+s.title+'</div>'+'<div class="sub">'+s.subtitle+'</div>'+'<div class="body">'+s.body+'</div>'+s.feats;
+  let dh='';
+  for(let i=0;i<total;i++){{let c=i===cur?'active':i<cur?'done':'';dh+='<div class="dot '+c+'"></div>';}}
+  document.getElementById('dots').innerHTML=dh;
+  let nh='';
+  if(cur>0) nh+='<button class="btn" onclick="go(-1)">← Back</button>';
+  if(cur<total-1){{nh+='<button class="btn primary" onclick="go(1)">Next →</button>';}}
+  document.getElementById('nav').innerHTML=nh;
+  const el=document.getElementById('slide');
+  el.style.animation='none';el.offsetHeight;el.style.animation='fadeIn .35s ease-out';
+}}
+function go(d){{cur=Math.max(0,Math.min(total-1,cur+d));render();}}
+render();
+</script></body></html>"""
+
+    _components.html(intro_html, height=650, scrolling=False)
 
 
 def mcard(label: str, value: str, delta: str = "", up: bool = True) -> str:
@@ -1397,6 +1604,21 @@ def render_cognitive_stream() -> str:
     return f'<div class="cog-stream">{"".join(lines)}</div>'
 
 
+def render_cognitive_stream() -> str:
+    """Render live cognitive stream showing AI thought feed."""
+    if not st.session_state.get("cognitive_log", []):
+        return '<div class="cog-stream"><span class="cog-txt">Awaiting first analysis cycle…</span></div>'
+    lines = []
+    for e in st.session_state.get("cognitive_log", [])[-20:]:  # Last 20 thoughts
+        lines.append(
+            f'<p class="cog-line">'
+            f'<span class="cog-ts">[{e.get("ts", "??:??")}]</span> '
+            f'<span class="cog-sym">{e.get("sym", "?")}  </span> '
+            f'<span class="{e.get("cls", "cog-txt")}">{e.get("text", "")}</span></p>'
+        )
+    return f'<div class="cog-stream">{"".join(lines)}</div>'
+
+
 def regime_orb_html(regime: str) -> str:
     r = _REGIME_COLORS.get(regime, _REGIME_COLORS["UNCERTAIN"])
     return f'<div class="orb-container"><div class="regime-orb" style="background:{r["bg"]};box-shadow:0 0 40px {r["glow"]},0 0 80px {r["glow"]}"></div><div class="orb-label" style="color:{r["text"]}">{regime}</div></div>'
@@ -1405,21 +1627,54 @@ def regime_orb_html(regime: str) -> str:
 def trade_dna_html(history: list[dict[str, Any]]) -> str:
     if not history:
         return '<div style="color:#495670;text-align:center;padding:1rem">No trade DNA yet</div>'
-    out = []
-    for i, t in enumerate(history[-20:]):
-        conf = float(t.get("confidence", 0.5))
-        risk = int(t.get("risk_score", 5))
-        pos = float(t.get("position_size_percent", 1.0))
-        action = str(t.get("action", "HOLD"))
-        color = {"BUY": "#64ffda", "SELL": "#ff6b6b"}.get(action, "#ffd93d")
-        out.append(
-            f'<div style="display:flex;gap:3px;align-items:flex-end" title="#{i + 1} {action}">'
-            f'<div style="height:{int(conf * 40 + 5)}px;width:8px;background:{color}"></div>'
-            f'<div style="height:{int(risk * 4 + 5)}px;width:6px;background:#b388ff"></div>'
-            f'<div style="height:{int(pos * 20 + 5)}px;width:6px;background:#4fc3f7"></div>'
-            f'</div>'
-        )
-    return f'<div style="display:flex;gap:6px;align-items:end;padding:.5rem;overflow-x:auto">{"".join(out)}</div>'
+    recent = history[-24:]
+    spacing = 26
+    left_pad = 18
+    width = left_pad * 2 + max(1, len(recent) - 1) * spacing
+    center_y = 52
+
+    top_points: list[tuple[float, float]] = []
+    bot_points: list[tuple[float, float]] = []
+    rungs: list[str] = []
+    nodes: list[str] = []
+
+    for i, t in enumerate(recent):
+        conf = max(0.0, min(1.0, float(t.get("confidence", 0.5) or 0.5)))
+        risk = max(1, min(10, int(t.get("risk_score", 5) or 5)))
+        action = str(t.get("action", "HOLD")).upper()
+        x = left_pad + i * spacing
+        amp = 8 + risk * 1.7
+        phase = i * 0.74
+        off = math.sin(phase) * amp
+        y_top = center_y - off
+        y_bot = center_y + off
+        top_points.append((x, y_top))
+        bot_points.append((x, y_bot))
+
+        action_color = {"BUY": "#64ffda", "SELL": "#ff6b6b"}.get(action, "#ffd93d")
+        rung_op = 0.22 + conf * 0.56
+        rungs.append(f'<line x1="{x:.1f}" y1="{y_top:.1f}" x2="{x:.1f}" y2="{y_bot:.1f}" stroke="{action_color}" stroke-opacity="{rung_op:.2f}" stroke-width="2"/>')
+        node_r = 2.2 + conf * 2.8
+        nodes.append(f'<circle cx="{x:.1f}" cy="{y_top:.1f}" r="{node_r:.2f}" fill="{action_color}"/>')
+        nodes.append(f'<circle cx="{x:.1f}" cy="{y_bot:.1f}" r="{max(2.0, node_r - 0.6):.2f}" fill="#4fc3f7" fill-opacity="0.92"/>')
+
+    top_line = " ".join(f"{x:.1f},{y:.1f}" for x, y in top_points)
+    bot_line = " ".join(f"{x:.1f},{y:.1f}" for x, y in bot_points)
+
+    return (
+        '<div style="padding:.35rem .45rem .45rem .45rem;border:1px solid #1a1a3e;border-radius:12px;'
+        'background:linear-gradient(180deg,rgba(12,12,31,.58),rgba(8,8,22,.42));overflow-x:auto;">'
+        f'<svg width="{width}" height="104" viewBox="0 0 {width} 104" xmlns="http://www.w3.org/2000/svg">'
+        f'<polyline points="{top_line}" fill="none" stroke="#64ffda" stroke-opacity="0.82" stroke-width="2.3"/>'
+        f'<polyline points="{bot_line}" fill="none" stroke="#b388ff" stroke-opacity="0.78" stroke-width="2.1"/>'
+        f"{''.join(rungs)}{''.join(nodes)}"
+        '</svg>'
+        '<div style="display:flex;gap:.8rem;flex-wrap:wrap;font-size:.62rem;color:#8892b0;padding:.15rem .15rem 0 .15rem">'
+        '<span><b style="color:#64ffda">●</b> BUY confidence</span>'
+        '<span><b style="color:#ff6b6b">●</b> SELL confidence</span>'
+        '<span><b style="color:#4fc3f7">●</b> Risk phase</span>'
+        '</div></div>'
+    )
 
 
 def risk_heatmap_html(state: dict[str, Any], decision: dict[str, Any] | None, vol_mult: float) -> str:
@@ -1470,6 +1725,51 @@ def risk_router_html(dec: dict[str, Any] | None) -> str:
     verdict = "✅ APPROVED" if all_pass else "⚠️ REVIEW"
     color = "#64ffda" if all_pass else "#ff6b6b"
     return f'<div class="router-flow">{"".join(steps)}</div><div style="text-align:center;color:{color};margin-top:.5rem">{verdict}</div>'
+
+
+def xai_panel_html(dec: dict[str, Any], df: pd.DataFrame | None = None) -> str:
+    """Explainable AI panel showing why the AI is trading."""
+    if df is None or df.empty:
+        return '<div class="xai-panel"><span style="color:#495670">Run analysis to see reasoning</span></div>'
+    
+    try:
+        rsi = float(df["rsi_14"].iloc[-1]) if pd.notna(df["rsi_14"].iloc[-1]) else 50.0
+        vol = float(df["volatility"].iloc[-1]) if pd.notna(df["volatility"].iloc[-1]) else 0.5
+        vol_24h = float(df["volume"].tail(24).mean())
+        vol_prev = float(df["volume"].tail(48).head(24).mean())
+        vol_spike = ((vol_24h / vol_prev - 1) * 100) if vol_prev > 0 else 0.0
+    except Exception:
+        rsi, vol, vol_spike = 50.0, 0.5, 0.0
+    
+    sentiment = "Bullish" if rsi > 55 else ("Bearish" if rsi < 45 else "Neutral")
+    sent_score = round((rsi - 50) / 50, 2)
+    sent_c = "#64ffda" if sent_score > 0 else ("#ff6b6b" if sent_score < 0 else "#ffd93d")
+    vol_label = "Low" if vol < 0.5 else ("High" if vol > 1.5 else "Moderate")
+    vol_c = "#64ffda" if vol < 0.8 else ("#ff6b6b" if vol > 1.5 else "#ffd93d")
+    spike_c = "#64ffda" if vol_spike > 10 else ("#ffd93d" if vol_spike > 0 else "#ff6b6b")
+    rsi_c = "#ff6b6b" if rsi > 70 else ("#64ffda" if rsi < 30 else "#ffd93d")
+    rsi_lbl = "Overbought" if rsi > 70 else ("Oversold" if rsi < 30 else "Neutral")
+    regime = dec.get("market_regime", "UNCERTAIN")
+    
+    return f'''<div class="xai-panel">
+        <div style="color:#4fc3f7;font-weight:600;font-size:0.75rem;margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:1px">
+            🔍 Why I'm Trading</div>
+        <div class="xai-factor">
+            <span style="color:#8892b0">Sentiment</span>
+            <span style="color:{sent_c}">{sentiment} ({sent_score:+.2f})</span></div>
+        <div class="xai-factor">
+            <span style="color:#8892b0">Volatility</span>
+            <span style="color:{vol_c}">{vol_label} ({vol:.3f})</span></div>
+        <div class="xai-factor">
+            <span style="color:#8892b0">Volume Trend</span>
+            <span style="color:{spike_c}">{vol_spike:+.1f}% vs prior 24h</span></div>
+        <div class="xai-factor">
+            <span style="color:#8892b0">RSI Signal</span>
+            <span style="color:{rsi_c}">{rsi:.1f} {rsi_lbl}</span></div>
+        <div class="xai-factor">
+            <span style="color:#8892b0">Regime</span>
+            <span style="color:#b388ff">{regime}</span></div>
+    </div>'''
 
 
 def simulate_trade(dec: dict[str, Any], capital: float) -> dict[str, float]:
@@ -1787,7 +2087,13 @@ def render_top_row(df: pd.DataFrame) -> str:
 def render_panel_nav(current_label: str) -> None:
     if current_label not in _PANELS:
         return
-    st.session_state["active_panel"] = current_label
+    
+    # Initialize session state only once, BEFORE creating widget
+    if "active_panel" not in st.session_state:
+        st.session_state["active_panel"] = current_label
+    if "active_tab" not in st.session_state:
+        st.session_state["active_tab"] = current_label
+    
     nav_key = "active_panel"
     seg = getattr(st, "segmented_control", None)
     if callable(seg):
@@ -1797,6 +2103,13 @@ def render_panel_nav(current_label: str) -> None:
             selected = st.radio("Panels", options=_PANELS, horizontal=True, key=nav_key, label_visibility="collapsed")
     else:
         selected = st.radio("Panels", options=_PANELS, horizontal=True, key=nav_key, label_visibility="collapsed")
+
+    # Widget updates st.session_state["active_panel"] automatically via key binding
+    # Only update active_tab after widget creation
+    if selected:
+        st.session_state["active_tab"] = selected
+    
+    # Trigger navigation if tab changed
     if selected and selected != current_label:
         target = PANEL_PAGE_MAP.get(selected)
         if target:
@@ -1936,6 +2249,54 @@ def confidence_gauge(conf: float) -> go.Figure:
     ))
     fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", font={"color": "#8892b0"}, height=200, margin=dict(l=20, r=20, t=30, b=10))
     return fig
+
+
+def decision_feed_html(limit: int = 10) -> str:
+    """Render recent AI decisions as HTML feed."""
+    history = st.session_state.get("decision_history", [])
+    if not history:
+        return '<div style="text-align:center;padding:2rem;color:#495670"><div style="font-size:1.5rem;margin-bottom:0.5rem">📋</div>No decisions yet. Run analysis.</div>'
+    
+    feed = []
+    for dec in reversed(history[-limit:]):
+        action = dec.get("action", "HOLD")
+        conf = dec.get("confidence", 0.5)
+        risk = dec.get("risk_score", 5)
+        regime = dec.get("market_regime", "UNCERTAIN")
+        ts = dec.get("time", "")
+        reason = dec.get("entry_reasoning", "")
+        asset = dec.get("asset", "?")
+        pos_pct = dec.get("position_size_percent", 0)
+        
+        icon = {"BUY": "🟢", "SELL": "🔴"}.get(action, "🟡")
+        css = {"BUY": "dec-buy", "SELL": "dec-sell"}.get(action, "dec-hold")
+        conf_color = "#64ffda" if conf >= 0.7 else ("#ffd93d" if conf >= 0.4 else "#ff6b6b")
+        
+        feed.append(f'''<div class="dec-box {css}" style="padding:0.8rem 1rem;margin:0.3rem 0">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:1rem;font-weight:700">{icon} {action} {asset}</span>
+                <span style="color:#495670;font-size:0.75rem">{ts}</span>
+            </div>
+            <div style="color:#8892b0;font-size:0.78rem;margin-top:0.3rem">
+                Conf: <span style="color:{conf_color}"><b>{conf:.0%}</b></span> · Risk: <b>{risk}/10</b> · 
+                Regime: <b>{regime}</b> · Pos: <b>{pos_pct:.1f}%</b>
+            </div>
+            <div style="color:#495670;font-size:0.72rem;margin-top:0.2rem;font-style:italic">
+                {reason[:100]}{'...' if len(reason) > 100 else ''}</div>
+        </div>''')
+    
+    buy_count = sum(1 for d in history if d.get("action") == "BUY")
+    sell_count = sum(1 for d in history if d.get("action") == "SELL")
+    hold_count = sum(1 for d in history if d.get("action") == "HOLD")
+    
+    summary = f'Total: <b>{len(history)}</b> · 🟢 BUY: <b>{buy_count}</b> · 🔴 SELL: <b>{sell_count}</b> · 🟡 HOLD: <b>{hold_count}</b>'
+    
+    return f'''<div style="padding:0.5rem 0">
+        {''.join(feed)}
+        <div style="padding:0.8rem;text-align:center;color:#8892b0;font-size:0.78rem">
+            {summary}
+        </div>
+    </div>'''
 
 
 def get_eth_usd_price_hint() -> float:

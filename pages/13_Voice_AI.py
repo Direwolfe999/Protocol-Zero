@@ -196,8 +196,38 @@ def _process_command(command: str) -> None:
 st.markdown(
 	"""
 	<style>
-	.voice-war-shell { border:1px solid rgba(79,195,247,.25); background:linear-gradient(180deg, rgba(12,12,31,.62), rgba(7,7,22,.45)); border-radius:14px; padding: .8rem .9rem; }
-	.voice-wave-bars { height:48px; border-radius:10px; border:1px solid rgba(79,195,247,.25); background:#070716; position:relative; overflow:hidden; display:flex; align-items:flex-end; gap:6px; padding:8px; }
+	.voice-page-title { margin-bottom: .35rem; letter-spacing:.2px; }
+	.voice-page-subtitle { color:#94a3b8; margin-bottom: 1rem; }
+	.voice-bento-grid { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:.85rem; margin-bottom:.65rem; }
+	.voice-bento-card { border:1px solid rgba(79,195,247,.18); background:linear-gradient(180deg, rgba(12,12,31,.76), rgba(8,8,24,.66)); border-radius:14px; padding:.9rem .95rem; box-shadow:0 10px 28px rgba(0,0,0,.24); position:relative; overflow:hidden; }
+	.voice-bento-card::before {
+		content:"";
+		position:absolute;
+		inset:0;
+		background:radial-gradient(85% 65% at 102% -10%, rgba(244,114,182,.12), transparent 45%), radial-gradient(70% 55% at -8% 105%, rgba(56,189,248,.12), transparent 48%);
+		pointer-events:none;
+	}
+	.voice-bento-card::after {
+		content:"";
+		position:absolute;
+		left:0;
+		right:0;
+		top:0;
+		height:1px;
+		background:linear-gradient(90deg, transparent, rgba(250,204,21,.42), rgba(167,139,250,.35), transparent);
+		pointer-events:none;
+	}
+	.voice-bento-card--hero { grid-column:span 12; padding:1rem 1.05rem; border-color:rgba(100,255,218,.28); }
+	.voice-bento-card--main { grid-column:span 8; }
+	.voice-bento-card--side { grid-column:span 4; }
+	.voice-bento-card h4 { margin:.1rem 0 .6rem 0; color:#dbeafe; font-size:.95rem; letter-spacing:.2px; }
+	.voice-chip-row { display:flex; gap:.45rem; flex-wrap:wrap; margin-top:.4rem; }
+	.voice-chip { border:1px solid rgba(148,163,184,.25); border-radius:999px; padding:.2rem .55rem; font-size:.72rem; color:#bfdbfe; background:rgba(15,23,42,.55); }
+	.voice-chip.ok { border-color:rgba(100,255,218,.45); color:#99f6e4; }
+	.voice-chip.warn { border-color:rgba(248,113,113,.42); color:#fecaca; }
+	.voice-bento-card--hero .voice-chip.ok { border-color:rgba(250,204,21,.55); color:#fde68a; background:rgba(54,40,7,.36); }
+	.voice-war-shell { border:1px solid rgba(79,195,247,.25); background:linear-gradient(180deg, rgba(12,12,31,.62), rgba(7,7,22,.45)); border-radius:12px; padding: .75rem .82rem; }
+	.voice-wave-bars { height:48px; border-radius:10px; border:1px solid rgba(79,195,247,.25); background:#070716; position:relative; overflow:hidden; display:flex; align-items:flex-end; gap:6px; padding:8px; margin-top:.4rem; }
 	.voice-wave-bars span { flex:1; border-radius:8px 8px 2px 2px; background:linear-gradient(180deg, rgba(100,255,218,.9), rgba(79,195,247,.45)); height:18%; opacity:.6; }
 	.voice-wave-bars.idle span:nth-child(1){height:22%}.voice-wave-bars.idle span:nth-child(2){height:28%}.voice-wave-bars.idle span:nth-child(3){height:18%}.voice-wave-bars.idle span:nth-child(4){height:30%}
 	.voice-wave-bars.idle span:nth-child(5){height:20%}.voice-wave-bars.idle span:nth-child(6){height:26%}.voice-wave-bars.idle span:nth-child(7){height:16%}.voice-wave-bars.idle span:nth-child(8){height:24%}
@@ -215,18 +245,115 @@ st.markdown(
 	.protocol-pulse.red { background:#ff6b6b; box-shadow:0 0 0 rgba(255,107,107,.7); animation:pulseRed 1.4s infinite; }
 	@keyframes pulseGreen { 0% { box-shadow:0 0 0 0 rgba(100,255,218,.6);} 70% {box-shadow:0 0 0 10px rgba(100,255,218,0);} 100% {box-shadow:0 0 0 0 rgba(100,255,218,0);} }
 	@keyframes pulseRed { 0% { box-shadow:0 0 0 0 rgba(255,107,107,.6);} 70% {box-shadow:0 0 0 10px rgba(255,107,107,0);} 100% {box-shadow:0 0 0 0 rgba(255,107,107,0);} }
-	.war-log { max-height: 170px; overflow:auto; background:#060612; border:1px solid #1a1a3e; border-radius:10px; padding:.5rem .65rem; font-family:'JetBrains Mono', monospace; font-size:.72rem; }
+	.war-log { max-height: 220px; overflow:auto; background:#060612; border:1px solid #1a1a3e; border-radius:10px; padding:.55rem .7rem; font-family:'JetBrains Mono', monospace; font-size:.72rem; }
+	.voice-history-item { border-left:3px solid #64ffda; padding:.55rem .75rem; margin:.42rem 0; background:rgba(6,6,18,.56); border-radius:0 8px 8px 0; }
+	div[data-testid="stRadio"] > div { padding:.18rem .2rem .08rem .2rem; background:rgba(15,23,42,.35); border:1px solid rgba(79,195,247,.2); border-radius:10px; }
+	div[data-testid="stTextInput"] > div > div { border-radius:10px; }
+	div[data-testid="stButton"] button { border-radius:10px; font-weight:600; }
+	.voice-exec-btn { 
+		background:linear-gradient(120deg, #0ea5e9, #2563eb 40%, #7c3aed 72%, #ec4899) !important;
+		border:1px solid rgba(244,208,63,.55) !important;
+		color:#eff6ff !important;
+		box-shadow:0 10px 24px rgba(37,99,235,.34), 0 0 0 1px rgba(244,208,63,.26), inset 0 1px 0 rgba(255,255,255,.22);
+		letter-spacing:.2px;
+		position:relative;
+		overflow:hidden;
+		text-shadow:0 1px 10px rgba(7,18,42,.45);
+	}
+	.voice-exec-btn::after {
+		content:"";
+		position:absolute;
+		inset:0;
+		background:linear-gradient(105deg, transparent 20%, rgba(255,255,255,.35) 48%, transparent 70%);
+		transform:translateX(-130%);
+		transition:transform .55s ease;
+	}
+	.voice-exec-btn:hover::after { transform:translateX(130%); }
+	.voice-exec-btn:hover { transform:translateY(-1px); filter:brightness(1.05); box-shadow:0 14px 28px rgba(37,99,235,.42), 0 0 20px rgba(250,204,21,.22), inset 0 1px 0 rgba(255,255,255,.28); }
+	.voice-quick-btn {
+		background:linear-gradient(180deg, rgba(15,23,42,.96), rgba(8,14,28,.92)) !important;
+		border:1px solid rgba(100,116,139,.45) !important;
+		color:#cbd5e1 !important;
+		box-shadow:0 8px 18px rgba(2,6,23,.42), inset 0 1px 0 rgba(255,255,255,.06);
+		transition:all .18s ease !important;
+		font-weight:700 !important;
+		letter-spacing:.18px;
+		position:relative;
+		overflow:hidden;
+	}
+	.voice-quick-btn::before {
+		content:"";
+		position:absolute;
+		inset:-1px;
+		background:linear-gradient(115deg, rgba(148,163,184,.16), rgba(94,234,212,.12), rgba(250,204,21,.14));
+		opacity:.55;
+		pointer-events:none;
+	}
+	.voice-quick-btn::after {
+		content:"";
+		position:absolute;
+		inset:0;
+		background:linear-gradient(110deg, transparent 24%, rgba(255,255,255,.2) 48%, transparent 70%);
+		transform:translateX(-130%);
+		transition:transform .42s ease;
+		pointer-events:none;
+	}
+	.voice-quick-btn:hover {
+		border-color:rgba(94,234,212,.6) !important;
+		color:#ecfeff !important;
+		transform:translateY(-1px) scale(1.01);
+		box-shadow:0 12px 24px rgba(8,145,178,.23), inset 0 1px 0 rgba(255,255,255,.16);
+	}
+	.voice-quick-btn:hover::after { transform:translateX(130%); }
+	.voice-quick-btn[data-voice-tone="kill"] {
+		border-color:rgba(248,113,113,.58) !important;
+		color:#fecaca !important;
+		background:linear-gradient(180deg, rgba(39,12,22,.95), rgba(26,7,14,.92)) !important;
+	}
+	.voice-quick-btn[data-voice-tone="kill"]::before {
+		background:linear-gradient(115deg, rgba(254,202,202,.14), rgba(248,113,113,.18), rgba(185,28,28,.22));
+	}
+	.voice-quick-btn[data-voice-tone="kill"]:hover {
+		border-color:rgba(252,165,165,.8) !important;
+		box-shadow:0 12px 24px rgba(239,68,68,.25), inset 0 1px 0 rgba(255,255,255,.12);
+	}
+	@media (max-width: 1100px) {
+		.voice-bento-card--main, .voice-bento-card--side { grid-column:span 12; }
+	}
+	@media (max-width: 780px) {
+		.voice-bento-grid { gap:.65rem; }
+		.voice-bento-card { padding:.8rem .8rem; }
+		.voice-page-subtitle { margin-bottom:.75rem; }
+	}
 	</style>
 	""",
 	unsafe_allow_html=True,
 )
 
-st.markdown("### 🎙️ Nova Sonic — Voice AI War Room")
-st.caption("Realtime tactical voice interface · streaming responses · lightweight UI")
+st.markdown("<h3 class='voice-page-title'>🎙️ Nova Sonic — Voice AI War Room</h3>", unsafe_allow_html=True)
+st.markdown("<div class='voice-page-subtitle'>Realtime tactical voice interface · streaming responses · polished command workflow</div>", unsafe_allow_html=True)
 
 if not flags.get("has_nova_sonic") or sonic is None:
 	st.warning("⚠️ Nova Sonic module not loaded. Ensure AWS credentials are configured.")
 else:
+	commands_count = len(st.session_state.get("nova_voice_history", []))
+	kill_state = bool(st.session_state.get("kill_switch_active", False))
+	regime = st.session_state.get("market_regime", "UNCERTAIN")
+	st.markdown(
+		"<div class='voice-bento-grid'><div class='voice-bento-card voice-bento-card--hero'>"
+		"<h4>Mission Control Snapshot</h4>"
+		f"<div class='voice-chip-row'>"
+		f"<span class='voice-chip ok'>Nova Sonic Online</span>"
+		f"<span class='voice-chip'>{regime}</span>"
+		f"<span class='voice-chip'>Commands {commands_count}</span>"
+		f"<span class='voice-chip {'warn' if kill_state else 'ok'}'>{'Kill-Switch Active' if kill_state else 'Kill-Switch Clear'}</span>"
+		"</div>"
+		"</div></div>",
+		unsafe_allow_html=True,
+	)
+
+	st.markdown("<div class='voice-bento-grid'>", unsafe_allow_html=True)
+	st.markdown("<div class='voice-bento-card voice-bento-card--main'><h4>Command Console</h4>", unsafe_allow_html=True)
 	mode = st.radio("Input Mode", ["Push-to-Talk", "Auto-VAD"], horizontal=True, key="voice_mode")
 	st.session_state["voice_session"]["mode"] = mode
 
@@ -290,6 +417,48 @@ else:
 
 	if send and voice_text.strip():
 		_process_command(voice_text)
+	st.markdown(
+		"""
+		<script>
+		(function() {
+		  const allButtons = Array.from(window.parent.document.querySelectorAll('button'));
+		  const buttons = allButtons.filter((btn) => {
+		    const text = (btn.innerText || '').trim().toLowerCase();
+		    return (
+		      text.includes('execute voice command') ||
+		      text.includes('status') ||
+		      text.includes('kill') ||
+		      text.includes('risk') ||
+		      text.includes('balance') ||
+		      text.includes('regime')
+		    );
+		  });
+		  const quickMap = [
+		    { t: 'status', tone: 'normal' },
+		    { t: 'kill', tone: 'kill' },
+		    { t: 'risk', tone: 'normal' },
+		    { t: 'balance', tone: 'normal' },
+		    { t: 'regime', tone: 'normal' }
+		  ];
+		  buttons.forEach((btn) => {
+		    const text = (btn.innerText || '').trim().toLowerCase();
+		    if (!text) return;
+		    if (text.includes('execute voice command')) {
+		      btn.classList.add('voice-exec-btn');
+		    }
+		    for (const item of quickMap) {
+		      if (text.includes(item.t)) {
+		        btn.classList.add('voice-quick-btn');
+		        btn.setAttribute('data-voice-tone', item.tone);
+		      }
+		    }
+		  });
+		})();
+		</script>
+		""",
+		unsafe_allow_html=True,
+	)
+	st.markdown("</div>", unsafe_allow_html=True)
 
 	conf = float(st.session_state["voice_session"].get("last_confidence", 0.5))
 	pulse = "green" if conf >= 0.6 else "red"
@@ -305,12 +474,14 @@ else:
 		status = "listening"
 	st.session_state["voice_session"]["state"] = status
 	bars = "".join(["<span></span>" for _ in range(8)])
+	st.markdown("<div class='voice-bento-card voice-bento-card--side'><h4>Voice Signal</h4>", unsafe_allow_html=True)
 	st.markdown(
 		f"<div class='voice-war-shell'><div><span class='protocol-pulse {pulse}'></span><b>Protocol Pulse</b> · Confidence {conf:.0%}</div><div class='voice-wave-bars {status}'>{bars}</div></div>",
 		unsafe_allow_html=True,
 	)
+	st.markdown("</div></div>", unsafe_allow_html=True)
 
-	st.markdown("#### 🚨 AI Alert Generator")
+	st.markdown("<div class='voice-bento-grid'><div class='voice-bento-card voice-bento-card--main'><h4>🚨 AI Alert Generator</h4>", unsafe_allow_html=True)
 	al_col1, al_col2 = st.columns([3, 1])
 	with al_col1:
 		alert_msg = st.text_input("Alert Message", placeholder="Sudden 15% price drop on ETH detected", key="alert_msg_input")
@@ -331,22 +502,9 @@ else:
 		)
 		_log("alert", severity=alert_sev, latency_ms=0)
 		_speak_js(alert_text)
+	st.markdown("</div>", unsafe_allow_html=True)
 
-	st.markdown("#### 📜 Voice Command History")
-	voice_hist = st.session_state.get("nova_voice_history", [])
-	if voice_hist:
-		for vh in reversed(voice_hist[-15:]):
-			st.markdown(
-				f"<div style='border-left:3px solid #64ffda;padding:.55rem .75rem;margin:.35rem 0;background:rgba(6,6,18,.5);border-radius:0 8px 8px 0'>"
-				f"<div style='display:flex;justify-content:space-between'><b style='color:#ccd6f6'>{vh.get('command','')}</b><span style='color:#495670;font-size:.68rem'>{vh.get('timestamp','')}</span></div>"
-				f"<div style='color:#8892b0;font-size:.78rem;margin-top:.2rem'>{str(vh.get('response_text',''))[:220]}</div>"
-				f"</div>",
-				unsafe_allow_html=True,
-			)
-	else:
-		st.info("No voice commands yet.")
-
-	st.markdown("#### 🖥️ Tactical Logging")
+	st.markdown("<div class='voice-bento-card voice-bento-card--side'><h4>🖥️ Tactical Logging</h4>", unsafe_allow_html=True)
 	logs = st.session_state.get("voice_war_logs", [])
 	if logs:
 		lines = [
@@ -356,6 +514,22 @@ else:
 		st.markdown(f"<div class='war-log'>{'<br/>'.join(lines)}</div>", unsafe_allow_html=True)
 	else:
 		st.caption("Awaiting voice events…")
+	st.markdown("</div></div>", unsafe_allow_html=True)
+
+	st.markdown("<div class='voice-bento-grid'><div class='voice-bento-card voice-bento-card--hero'><h4>📜 Voice Command History</h4>", unsafe_allow_html=True)
+	voice_hist = st.session_state.get("nova_voice_history", [])
+	if voice_hist:
+		for vh in reversed(voice_hist[-15:]):
+			st.markdown(
+				f"<div class='voice-history-item'>"
+				f"<div style='display:flex;justify-content:space-between'><b style='color:#ccd6f6'>{vh.get('command','')}</b><span style='color:#495670;font-size:.68rem'>{vh.get('timestamp','')}</span></div>"
+				f"<div style='color:#8892b0;font-size:.78rem;margin-top:.2rem'>{str(vh.get('response_text',''))[:220]}</div>"
+				f"</div>",
+				unsafe_allow_html=True,
+			)
+	else:
+		st.info("No voice commands yet.")
+	st.markdown("</div></div>", unsafe_allow_html=True)
 
 sonic_status = sonic.status() if flags.get("has_nova_sonic") and sonic is not None else {"mode": "offline"}
 st.caption(
