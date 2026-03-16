@@ -10,6 +10,7 @@ headless = true
 enableCORS = false
 enableXsrfProtection = false
 maxUploadSize = 10
+maxMessageSize = 500
 
 [browser]
 gatherUsageStats = false

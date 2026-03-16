@@ -219,6 +219,17 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+
+def _fragmentize(func):
+    """Use `st.fragment` when available (Streamlit 1.33+), else no-op."""
+    _frag = getattr(st, "fragment", None)
+    if callable(_frag):
+        try:
+            return _frag(func)
+        except Exception:
+            return func
+    return func
+
 # ════════════════════════════════════════════════════════════
 #  CSS — dark cinematic theme with animations
 # ════════════════════════════════════════════════════════════
@@ -2210,6 +2221,111 @@ def pnl_chart(tx_log: list[dict]) -> go.Figure | None:
     return fig
 
 
+@_fragmentize
+def _render_register_onchain_fragment() -> None:
+    """Fragmentized on-chain registration action to avoid full-app reruns."""
+    if st.button("🔗  Register On-Chain", width="stretch", type="primary"):
+        with st.spinner("Minting Identity NFT on ERC-8004 Registry…"):
+            _cog("▣", "Identity NFT mint initiated", "ok")
+            reg_result = _real_register_agent()
+            if reg_result["success"]:
+                st.session_state["agent_registered"] = True
+                st.session_state.pop("_trust_cache", None)  # invalidate so Trust Panel refreshes
+                tx_display = _normalize_tx_hash(reg_result.get("tx"))
+                if _is_tx_hash(tx_display):
+                    st.session_state["last_reg_tx"] = tx_display
+                    _cog("▣", f"TX: {tx_display[:24]}…", "sym")
+                else:
+                    # Preserve previous valid tx if this call returns "already registered"
+                    prev_tx = _normalize_tx_hash(st.session_state.get("last_reg_tx", ""))
+                    st.session_state["last_reg_tx"] = prev_tx if _is_tx_hash(prev_tx) else None
+                    _cog("▣", "Already registered — no new tx hash returned", "info")
+                _cog("✓", "Agent registered on ERC-8004 Identity Registry", "ok")
+                st.session_state["tx_log"].append({
+                    "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                    "action": "REGISTER", "asset": "—", "amount": "—",
+                    "status": "✅ Confirmed",
+                    "tx_hash": (tx_display[:18] + "…") if _is_tx_hash(tx_display) else "Already registered",
+                    "tx_hash_full": tx_display if _is_tx_hash(tx_display) else "",
+                })
+                if _is_tx_hash(tx_display):
+                    st.success(f"Registered on-chain! TX: {tx_display[:28]}…")
+                else:
+                    st.success("Agent already registered on-chain.")
+            else:
+                err = reg_result.get("error", "Unknown error")
+                _cog("✗", f"Registration failed: {err}", "err")
+                # Fallback: mark registered locally for demo
+                st.session_state["agent_registered"] = True
+                st.session_state.pop("_trust_cache", None)  # invalidate so Trust Panel refreshes
+                tx = "0x" + hashlib.sha256(
+                    st.session_state["agent_name"].encode()).hexdigest()[:40]
+                # Preserve any previous valid on-chain tx hash
+                prev_tx = _normalize_tx_hash(st.session_state.get("last_reg_tx", ""))
+                st.session_state["last_reg_tx"] = prev_tx if _is_tx_hash(prev_tx) else None
+                _cog("▣", f"Demo TX: {tx[:20]}…", "sym")
+                st.session_state["tx_log"].append({
+                    "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                    "action": "REGISTER", "asset": "—", "amount": "—",
+                    "status": "⚠️ Local", "tx_hash": tx[:18] + "…",
+                    "tx_hash_full": "",
+                })
+                st.warning(f"Chain unavailable — registered locally. Error: {err}")
+            # Avoid forced rerun here (can trigger blank-screen transitions on some hosts).
+
+
+@_fragmentize
+def _render_ai_analysis_fragment() -> None:
+    """Fragmentized AI analysis trigger to minimize websocket pressure."""
+    col_r, _spacer = st.columns([1, 3])
+    with col_r:
+        run_ai = st.button("▶  Run Analysis", width="stretch", type="primary")
+
+    if not run_ai:
+        return
+
+    _df = st.session_state.get("market_df")
+    if _df is None:
+        st.warning("Market data unavailable. Refresh market data and try again.")
+        return
+
+    with st.spinner("Neural pathways activating…"):
+        _cog("▣", f"Analysis cycle initiated — pair {st.session_state['selected_pair']}", "info")
+        _cog("▣", "Regime detection: scanning SMA/RSI/Vol matrix", "info")
+
+        import time as _time_mod
+        _t0 = _time_mod.perf_counter()
+        decision = run_analysis(
+            _df, st.session_state["selected_pair"],
+            st.session_state["whatif_vol_mult"])
+        _t1 = _time_mod.perf_counter()
+        st.session_state["analysis_latency_ms"] = round((_t1 - _t0) * 1000)
+
+        _cog("▣", f"Regime classified: {decision['market_regime']}", "sym")
+        vol_val = _df["volatility"].iloc[-1]
+        _cog("▣",
+                f"Volatility index: {vol_val:.3f}" if pd.notna(vol_val) else "Volatility: calculating…",
+                "info")
+        _cog("▣", f"Confidence computed: {decision['confidence']:.2f}",
+                "ok" if decision["confidence"] >= 0.6 else "warn")
+        _cog("▣", f"Risk score: {decision['risk_score']}/10",
+                "warn" if decision["risk_score"] > 6 else "ok")
+        if decision["confidence"] < 0.6:
+            _cog("⚠", "Confidence below threshold — forcing HOLD", "warn")
+        else:
+            lvl = ("ok" if decision["action"] == "BUY"
+                    else ("err" if decision["action"] == "SELL" else "warn"))
+            _cog("▣", f"Signal: {decision['action']} {decision['asset']}", lvl)
+        _cog("✓", "Analysis cycle complete", "ok")
+        _cog("⏱", f"Latency: {st.session_state['analysis_latency_ms']}ms", "info")
+
+        st.session_state["latest_decision"] = decision
+        st.session_state["decision_history"].append({
+            "time": datetime.now(timezone.utc).strftime("%H:%M:%S"),
+            **decision,
+        })
+
+
 # ════════════════════════════════════════════════════════════
 #  SIDEBAR
 # ════════════════════════════════════════════════════════════
@@ -2309,54 +2425,7 @@ with st.sidebar:
              else '<span class="badge badge-gold">Unregistered</span>')
     st.markdown(f"ERC-8004: {badge}", unsafe_allow_html=True)
 
-    if st.button("🔗  Register On-Chain", width="stretch", type="primary"):
-        with st.spinner("Minting Identity NFT on ERC-8004 Registry…"):
-            _cog("▣", "Identity NFT mint initiated", "ok")
-            reg_result = _real_register_agent()
-            if reg_result["success"]:
-                st.session_state["agent_registered"] = True
-                st.session_state.pop("_trust_cache", None)  # invalidate so Trust Panel refreshes
-                tx_display = _normalize_tx_hash(reg_result.get("tx"))
-                if _is_tx_hash(tx_display):
-                    st.session_state["last_reg_tx"] = tx_display
-                    _cog("▣", f"TX: {tx_display[:24]}…", "sym")
-                else:
-                    # Preserve previous valid tx if this call returns "already registered"
-                    prev_tx = _normalize_tx_hash(st.session_state.get("last_reg_tx", ""))
-                    st.session_state["last_reg_tx"] = prev_tx if _is_tx_hash(prev_tx) else None
-                    _cog("▣", "Already registered — no new tx hash returned", "info")
-                _cog("✓", "Agent registered on ERC-8004 Identity Registry", "ok")
-                st.session_state["tx_log"].append({
-                    "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
-                    "action": "REGISTER", "asset": "—", "amount": "—",
-                    "status": "✅ Confirmed",
-                    "tx_hash": (tx_display[:18] + "…") if _is_tx_hash(tx_display) else "Already registered",
-                    "tx_hash_full": tx_display if _is_tx_hash(tx_display) else "",
-                })
-                if _is_tx_hash(tx_display):
-                    st.success(f"Registered on-chain! TX: {tx_display[:28]}…")
-                else:
-                    st.success("Agent already registered on-chain.")
-            else:
-                err = reg_result.get("error", "Unknown error")
-                _cog("✗", f"Registration failed: {err}", "err")
-                # Fallback: mark registered locally for demo
-                st.session_state["agent_registered"] = True
-                st.session_state.pop("_trust_cache", None)  # invalidate so Trust Panel refreshes
-                tx = "0x" + hashlib.sha256(
-                    st.session_state["agent_name"].encode()).hexdigest()[:40]
-                # Preserve any previous valid on-chain tx hash
-                prev_tx = _normalize_tx_hash(st.session_state.get("last_reg_tx", ""))
-                st.session_state["last_reg_tx"] = prev_tx if _is_tx_hash(prev_tx) else None
-                _cog("▣", f"Demo TX: {tx[:20]}…", "sym")
-                st.session_state["tx_log"].append({
-                    "timestamp": datetime.now(timezone.utc).strftime("%H:%M:%S"),
-                    "action": "REGISTER", "asset": "—", "amount": "—",
-                    "status": "⚠️ Local", "tx_hash": tx[:18] + "…",
-                    "tx_hash_full": "",
-                })
-                st.warning(f"Chain unavailable — registered locally. Error: {err}")
-            # Avoid forced rerun here (can trigger blank-screen transitions on some hosts).
+    _render_register_onchain_fragment()
 
     # ── On-Chain Proof Links ──────────────────────────────
     if st.session_state["agent_registered"]:
@@ -2818,47 +2887,7 @@ with tab_brain:
     st.markdown("### 🧠 AI Trading Analysis")
     st.caption("Strategic reasoning engine · Nova Lite on Bedrock")
 
-    col_r, _spacer = st.columns([1, 3])
-    with col_r:
-        run_ai = st.button("▶  Run Analysis", width="stretch",
-                            type="primary")
-
-    if run_ai:
-        with st.spinner("Neural pathways activating…"):
-            _cog("▣", f"Analysis cycle initiated — pair {st.session_state['selected_pair']}", "info")
-            _cog("▣", "Regime detection: scanning SMA/RSI/Vol matrix", "info")
-
-            import time as _time_mod
-            _t0 = _time_mod.perf_counter()
-            decision = run_analysis(
-                df, st.session_state["selected_pair"],
-                st.session_state["whatif_vol_mult"])
-            _t1 = _time_mod.perf_counter()
-            st.session_state["analysis_latency_ms"] = round((_t1 - _t0) * 1000)
-
-            _cog("▣", f"Regime classified: {decision['market_regime']}", "sym")
-            vol_val = df["volatility"].iloc[-1]
-            _cog("▣",
-                 f"Volatility index: {vol_val:.3f}" if pd.notna(vol_val) else "Volatility: calculating…",
-                 "info")
-            _cog("▣", f"Confidence computed: {decision['confidence']:.2f}",
-                 "ok" if decision["confidence"] >= 0.6 else "warn")
-            _cog("▣", f"Risk score: {decision['risk_score']}/10",
-                 "warn" if decision["risk_score"] > 6 else "ok")
-            if decision["confidence"] < 0.6:
-                _cog("⚠", "Confidence below threshold — forcing HOLD", "warn")
-            else:
-                lvl = ("ok" if decision["action"] == "BUY"
-                       else ("err" if decision["action"] == "SELL" else "warn"))
-                _cog("▣", f"Signal: {decision['action']} {decision['asset']}", lvl)
-            _cog("✓", "Analysis cycle complete", "ok")
-            _cog("⏱", f"Latency: {st.session_state['analysis_latency_ms']}ms", "info")
-
-            st.session_state["latest_decision"] = decision
-            st.session_state["decision_history"].append({
-                "time": datetime.now(timezone.utc).strftime("%H:%M:%S"),
-                **decision,
-            })
+    _render_ai_analysis_fragment()
 
     # Display latest decision
     _lat = st.session_state.get("analysis_latency_ms", 0)
