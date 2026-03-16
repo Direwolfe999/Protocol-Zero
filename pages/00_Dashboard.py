@@ -6,9 +6,13 @@ import app_core as core
 
 
 df = core.render_shell(show_top_row=True)
+flags = core.module_flags()
 
 st.markdown("### 🏠 Operations Dashboard")
 st.caption("Multipage home with shared runtime state and real-time controls")
+
+st.markdown("#### Panels")
+core.render_panel_nav(str(st.session_state.get("active_panel", "📊  Market")))
 
 c1, c2, c3, c4 = st.columns(4)
 with c1:
@@ -24,7 +28,7 @@ with c4:
 st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 st.markdown("#### Quick Navigation")
 
-qa1, qa2, qa3, qa4 = st.columns(4)
+qa1, qa2, qa3, qa4, qa5 = st.columns(5)
 with qa1:
 	if st.button("📊 Market", use_container_width=True):
 		st.switch_page("pages/01_Market.py")
@@ -35,8 +39,42 @@ with qa3:
 	if st.button("🛡️ Risk & Exec", use_container_width=True):
 		st.switch_page("pages/03_Risk_Execution.py")
 with qa4:
+	if st.button("🌐 Trust Panel", use_container_width=True):
+		st.switch_page("pages/04_Trust_Panel.py")
+with qa5:
 	if st.button("📊 Performance", use_container_width=True):
 		st.switch_page("pages/05_Performance.py")
+
+qb1, qb2, qb3, qb4, qb5 = st.columns(5)
+with qb1:
+	if st.button("🔗 Audit Trail", use_container_width=True):
+		st.switch_page("pages/06_Audit_Trail.py")
+with qb2:
+	if st.button("🧠 Calibration", use_container_width=True):
+		st.switch_page("pages/07_Calibration.py")
+with qb3:
+	if st.button("📡 Microstructure", use_container_width=True):
+		st.switch_page("pages/08_Microstructure.py")
+with qb4:
+	if st.button("📒 TX Log", use_container_width=True):
+		st.switch_page("pages/09_TX_Log.py")
+with qb5:
+	if st.button("📈 P&L", use_container_width=True):
+		st.switch_page("pages/10_PnL.py")
+
+qc1, qc2, qc3, qc4 = st.columns(4)
+with qc1:
+	if st.button("🔍 History", use_container_width=True):
+		st.switch_page("pages/11_History.py")
+with qc2:
+	if st.button("🔍 Nova Act Audit", use_container_width=True):
+		st.switch_page("pages/12_Nova_Act_Audit.py")
+with qc3:
+	if st.button("🎙️ Voice AI", use_container_width=True):
+		st.switch_page("pages/13_Voice_AI.py")
+with qc4:
+	if st.button("🖼️ Multimodal", use_container_width=True):
+		st.switch_page("pages/14_Multimodal.py")
 
 st.markdown("#### Session Snapshot")
 st.dataframe(
@@ -51,5 +89,33 @@ st.dataframe(
 	use_container_width=True,
 	hide_index=True,
 )
+
+st.markdown("#### 🔌 Module Status")
+mods = [
+	("Chain Interactor", flags["has_chain"]),
+	("Performance Tracker", flags["has_perf"]),
+	("Validation Artifacts", flags["has_artifacts"]),
+	("Risk Check", flags["has_risk"]),
+	("Sign Trade", flags["has_sign"]),
+	("DEX Executor", flags["has_dex"]),
+	("Nova Act", flags["has_nova_act"]),
+	("Nova Sonic", flags["has_nova_sonic"]),
+	("Nova Embed", flags["has_nova_embed"]),
+]
+
+mod_cards = ""
+for name, connected in mods:
+	icon = "🟢" if connected else "🔴"
+	cls = "mod-on" if connected else "mod-off"
+	tag = "LIVE" if connected else "OFF"
+	mod_cards += (
+		f'<div class="mod-card {cls}">'
+		f'<span class="mod-icon">{icon}</span>'
+		f'<span class="mod-name">{name}</span>'
+		f'<span class="mod-tag">{tag}</span>'
+		f'</div>'
+	)
+
+st.markdown(f'<div class="mod-grid">{mod_cards}</div>', unsafe_allow_html=True)
 
 core.finalize_page()

@@ -50,7 +50,7 @@ def render_risk_execution_panel(
     st.caption("Dry-run the trade locally — see expected gas and final balance before spending real Coins.")
     sim_dec = st.session_state.get("latest_decision")
     if sim_dec and sim_dec["action"] != "HOLD":
-        if st.button("🧪  Simulate Trade", width="stretch"):
+        if st.button("🧪  Simulate Trade", use_container_width=True):
             sim = simulate_trade(sim_dec, st.session_state["total_capital_usd"])
             cog("🧪", f"Simulation: gas={sim['gas_gwei']}gwei "
                 f"slip={sim['slippage_pct']}% net=${sim['net_amount']}", "info")
@@ -193,7 +193,7 @@ def render_risk_execution_panel(
                 execute = True
         else:
             execute = st.button("🔏  Sign & Execute Trade",
-                                width="stretch", type="primary",
+                                use_container_width=True, type="primary",
                                 disabled=(not all_passed
                                           or st.session_state["kill_switch_active"]))
 
