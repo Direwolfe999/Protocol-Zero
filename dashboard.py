@@ -28,6 +28,7 @@ import logging
 import math
 import re
 import time
+import gc
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
@@ -45,6 +46,10 @@ from session_store import restore_persisted_state, persist_state
 _CLOUD_SAFE_MODE = os.getenv("PZ_CLOUD_SAFE_MODE", "1").strip().lower() in {"1", "true", "yes", "on"}
 _ULTRA_LITE_MODE = os.getenv("PZ_ULTRA_LITE_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
 _DISABLE_EXPLICIT_RERUN = os.getenv("PZ_DISABLE_EXPLICIT_RERUN", "1").strip().lower() in {"1", "true", "yes", "on"}
+_SINGLE_PANEL_MODE = os.getenv(
+    "PZ_SINGLE_PANEL_MODE",
+    "1" if _CLOUD_SAFE_MODE else "0",
+).strip().lower() in {"1", "true", "yes", "on"}
 
 # Hosted stability hardening:
 # Widget interactions already trigger a rerun automatically. Extra explicit
@@ -2755,9 +2760,7 @@ st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
 #  TABS
 # ════════════════════════════════════════════════════════════
 
-(tab_market, tab_brain, tab_risk, tab_trust, tab_perf,
- tab_audit, tab_calib, tab_micro, tab_log, tab_pnl, tab_history,
- tab_nova_act, tab_voice, tab_multimodal) = st.tabs([
+_PANELS = [
     "📊  Market",
     "🧠  AI Brain",
     "🛡️  Risk & Exec",
@@ -2772,14 +2775,26 @@ st.markdown('<div class="hz"></div>', unsafe_allow_html=True)
     "🔍  Nova Act Audit",
     "🎙️  Voice AI",
     "🖼️  Multimodal",
-])
+]
+
+if _SINGLE_PANEL_MODE:
+    st.caption("Stability mode: rendering one panel at a time to prevent websocket drops.")
+    _active_panel = st.radio(
+        "Panel",
+        options=_PANELS,
+        key="active_panel",
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+else:
+    _active_panel = "ALL"
 
 
 # ──────────────────────────────────────────────────────────
 #  TAB 1 — Market Data
 # ──────────────────────────────────────────────────────────
 
-with tab_market:
+if _active_panel in ("ALL", "📊  Market"):
     col_pair, col_ref, col_live = st.columns([2.2, 0.9, 1.5])
     with col_pair:
         new_pair = st.selectbox(
@@ -2883,7 +2898,7 @@ with tab_market:
 #  TAB 2 — AI Analysis
 # ──────────────────────────────────────────────────────────
 
-with tab_brain:
+if _active_panel in ("ALL", "🧠  AI Brain"):
     st.markdown("### 🧠 AI Trading Analysis")
     st.caption("Strategic reasoning engine · Nova Lite on Bedrock")
 
@@ -3050,7 +3065,7 @@ with tab_brain:
 #  TAB 3 — Risk & Execution
 # ──────────────────────────────────────────────────────────
 
-with tab_risk:
+if _active_panel in ("ALL", "🛡️  Risk & Exec"):
     st.markdown("### 🛡️ Risk Management & Execution")
 
     # ── Risk Heat Map ─────────────────────────────────────
@@ -3393,7 +3408,7 @@ with tab_risk:
 #  TAB 4 — Transaction Log
 # ──────────────────────────────────────────────────────────
 
-with tab_log:
+if _active_panel in ("ALL", "📒  TX Log"):
     st.markdown("### 📒 Transaction & Intent Log")
 
     if st.session_state["tx_log"]:
@@ -3452,7 +3467,7 @@ with tab_log:
 #  TAB 5 — P&L Tracker
 # ──────────────────────────────────────────────────────────
 
-with tab_pnl:
+if _active_panel in ("ALL", "📈  P&L"):
     st.markdown("### 📈 Profit & Loss Tracker")
     st.caption("Cumulative P&L across all executed trades this session.")
 
@@ -3520,7 +3535,7 @@ with tab_pnl:
 #  TAB 6 — AI Decision History Feed
 # ──────────────────────────────────────────────────────────
 
-with tab_history:
+if _active_panel in ("ALL", "🔍  History"):
     st.markdown("### 🔍 AI Decision History")
     st.caption("Full feed of AI decisions with profitability annotations.")
 
@@ -3594,7 +3609,7 @@ with tab_history:
 #  TAB 4 — 🌐 ERC-8004 Live Trust Panel
 # ──────────────────────────────────────────────────────────
 
-with tab_trust:
+if _active_panel in ("ALL", "🌐  Trust Panel"):
     st.markdown("### 🌐 ERC-8004 On-Chain Trust Panel")
     st.caption("Live trust data from Identity, Reputation, and Validation Registries on Sepolia")
 
@@ -3920,7 +3935,7 @@ with tab_trust:
 #  TAB 5 — 📊 Institutional Performance Analytics
 # ──────────────────────────────────────────────────────────
 
-with tab_perf:
+if _active_panel in ("ALL", "📊  Performance"):
     st.markdown("### 📊 Institutional Performance Analytics")
     st.caption("Sharpe · Sortino · Calmar · Max Drawdown · Equity Curve — Real-time from PerformanceTracker")
 
@@ -4055,7 +4070,7 @@ with tab_perf:
 #  TAB 6 — 🔗 Cryptographic Audit Trail
 # ──────────────────────────────────────────────────────────
 
-with tab_audit:
+if _active_panel in ("ALL", "🔗  Audit Trail"):
     st.markdown("### 🔗 Cryptographic Audit Trail")
     st.caption("Every trade decision sealed with keccak256 hashes — verifiable, immutable, trustless")
 
@@ -4144,7 +4159,7 @@ with tab_audit:
 #  TAB 7 — 🧠 AI Confidence Calibration
 # ──────────────────────────────────────────────────────────
 
-with tab_calib:
+if _active_panel in ("ALL", "🧠  Calibration"):
     st.markdown("### 🧠 AI Confidence Calibration")
     st.caption("Is the agent's confidence well-calibrated? Predicted confidence vs actual win rate.")
 
@@ -4265,7 +4280,7 @@ with tab_calib:
 #  TAB 8 — 📡 Live Market Microstructure
 # ──────────────────────────────────────────────────────────
 
-with tab_micro:
+if _active_panel in ("ALL", "📡  Microstructure"):
     st.markdown("### 📡 Live Market Microstructure")
     st.caption("Volatility regimes · Volume profile · Regime transitions — real-time from market data")
 
@@ -4418,7 +4433,7 @@ with tab_micro:
 #  TAB 12 — 🔍 Nova Act Auditor
 # ──────────────────────────────────────────────────────────
 
-with tab_nova_act:
+if _active_panel in ("ALL", "🔍  Nova Act Audit"):
     st.markdown("### 🔍 Nova Act — Smart Contract Auditor")
     st.caption("Browser-based automated contract & token auditing via Amazon Nova Act")
 
@@ -4571,7 +4586,7 @@ with tab_nova_act:
 #  TAB 13 — 🎙️ Voice AI War Room
 # ──────────────────────────────────────────────────────────
 
-with tab_voice:
+if _active_panel in ("ALL", "🎙️  Voice AI"):
     st.markdown("### 🎙️ Nova Sonic — Voice AI War Room")
     st.caption("Natural language voice commands & AI-generated alerts via Amazon Nova Sonic")
 
@@ -4744,7 +4759,7 @@ with tab_voice:
 #  TAB 14 — 🖼️ Multimodal Embeddings
 # ──────────────────────────────────────────────────────────
 
-with tab_multimodal:
+if _active_panel in ("ALL", "🖼️  Multimodal"):
     st.markdown("### 🖼️ Nova Embeddings — Multimodal Scam Detection")
     st.caption("Analyze text, images, logos & charts for scam patterns using Amazon Nova Multimodal Embeddings")
 
@@ -5082,3 +5097,9 @@ if (not _CLOUD_SAFE_MODE) and st.session_state.get("autonomous_mode") and not st
         st.caption("Live auto-reload is disabled for hosted stability. Use Refresh controls when needed.")
         if st.button("🔄 Refresh Now", key="auto_refresh_now"):
             st.rerun()
+
+# Best-effort memory cleanup for long-lived hosted sessions.
+try:
+    gc.collect()
+except Exception:
+    pass
