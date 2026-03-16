@@ -1664,7 +1664,11 @@ function render(){{
   el.style.animation='none';el.offsetHeight;el.style.animation='fadeIn .35s ease-out';
 }}
 function go(d){{cur=Math.max(0,Math.min(total-1,cur+d));render();}}
-function launch(){{window.location.href=window.location.pathname+'?intro_done=1';}}
+function launch(){{
+  const url = new URL(window.location);
+  url.searchParams.set('intro_done', '1');
+  window.location.href = url.toString();
+}}
 render();
 </script></body></html>"""
 
