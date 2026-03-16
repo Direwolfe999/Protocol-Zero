@@ -8,21 +8,16 @@ import streamlit as st
 
 import app_core as core
 
-# Initialize intro flag from localStorage if set
-st.markdown("""
-<script>
-if (localStorage.getItem('pz_intro_done') === 'true') {
-    window.streamlit_intro_done = true;
-    localStorage.removeItem('pz_intro_done');
-}
-</script>
-""", unsafe_allow_html=True)
+# Skip intro if user has the query parameter
+skip_intro = st.query_params.get("skip_intro") == "true"
 
-# Show intro screen once per session
-if not st.session_state.get("_intro_completed", False):
+# Show intro screen once per session (unless skipped)
+if not skip_intro and not st.session_state.get("_intro_completed", False):
     core.render_intro_screen()
     st.session_state["_intro_completed"] = True
     st.stop()
+elif skip_intro:
+    st.session_state["_intro_completed"] = True
 
 df = core.render_shell(show_top_row=True)
 flags = core.module_flags()
