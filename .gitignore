@@ -7,7 +7,9 @@
 performance_history.json
 
 # ── Internal docs (not for submission) ────
+.internal/
 HACKATHON_IMPROVEMENT_PLAN.md
+gap analysis*
 gap analysis*
 
 # ── Virtual environments ──────────────────
