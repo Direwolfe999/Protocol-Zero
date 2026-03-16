@@ -31,7 +31,7 @@ dependencies = [
 
 [project.optional-dependencies]
 nova-act = ["nova-act>=0.1.0"]
-dev = ["pytest>=8.0.0", "pytest-cov>=4.1.0", "ruff>=0.3.0"]
+dev = ["pytest>=8.0.0", "pytest-cov>=4.1.0", "ruff>=0.3.0", "pytest-asyncio>=0.21.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -39,9 +39,11 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+asyncio_mode = "auto"
 markers = [
     "unit: pure logic tests with no external dependencies",
     "integration: tests requiring chain / API connectivity",
+    "asyncio: async test",
 ]
 
 [tool.coverage.run]
