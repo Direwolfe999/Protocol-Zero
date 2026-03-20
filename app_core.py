@@ -1732,7 +1732,7 @@ def _try_fetch_live(symbol: str) -> pd.DataFrame | None:
             if ex_cls is None:
                 continue
             try:
-                ex = ex_cls({"enableRateLimit": True, "timeout": 4000})
+                ex = ex_cls({"enableRateLimit": False, "timeout": 4000})
             except Exception:
                 continue
             for s in symbols:

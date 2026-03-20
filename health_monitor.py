@@ -70,7 +70,7 @@ def system_health_check(
         _feed_ms = 0
 
         try:
-            _ccxt_hc.binance({"enableRateLimit": True, "timeout": 3000}).fetch_ticker("ETH/USDT")
+            _ccxt_hc.binance({"enableRateLimit": False, "timeout": 3000}).fetch_ticker("ETH/USDT")
             _feed_status = "LIVE"
             _feed_ms = round((time.perf_counter() - _t) * 1000)
         except Exception:
@@ -79,7 +79,7 @@ def system_health_check(
                     _ex_cls = getattr(_ccxt_hc, _ex_name, None)
                     if _ex_cls is None:
                         continue
-                    _ex_cls({"enableRateLimit": True, "timeout": 3000}).fetch_ticker("ETH/USD")
+                    _ex_cls({"enableRateLimit": False, "timeout": 3000}).fetch_ticker("ETH/USD")
                     _feed_name = f"{_ex_name.capitalize()} Feed"
                     _feed_status = "FALLBACK"
                     _feed_ms = round((time.perf_counter() - _t) * 1000)

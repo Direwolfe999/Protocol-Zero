@@ -79,7 +79,7 @@ def fetch_market_data(
         if ex_cls is None:
             continue
         try:
-            exchange = ex_cls({"enableRateLimit": True, "timeout": 5000})
+            exchange = ex_cls({"enableRateLimit": False, "timeout": 5000})
         except Exception as exc:
             last_exc = exc
             continue
@@ -349,7 +349,7 @@ def _tool_market_deep_dive(inp: dict) -> dict:
     symbol = f"{asset}/USDT"
 
     try:
-        exchange = ccxt.binance({"enableRateLimit": True})
+        exchange = ccxt.binance({"enableRateLimit": False})
 
         # Fetch real ticker + orderbook
         ticker = exchange.fetch_ticker(symbol)

@@ -1315,6 +1315,7 @@ if not st.session_state["intro_completed"]:
 #  Real-Time Data Connectors
 # ════════════════════════════════════════════════════════════
 
+@st.cache_data(ttl=60, show_spinner=False)
 def _fetch_on_chain_identity() -> dict:
     """Pull live identity data from ERC-8004 Identity Registry."""
     if not _HAS_CHAIN or _CHAIN is None:
@@ -1326,7 +1327,7 @@ def _fetch_on_chain_identity() -> dict:
     except Exception as e:
         return {"registered": False, "token_id": None, "error": str(e)}
 
-
+@st.cache_data(ttl=60, show_spinner=False)
 def _fetch_on_chain_reputation() -> dict:
     """Pull live reputation from ERC-8004 Reputation Registry."""
     if not _HAS_CHAIN or _CHAIN is None:
@@ -1339,7 +1340,7 @@ def _fetch_on_chain_reputation() -> dict:
         logger.warning("Reputation fetch failed: %s", e)
         return {"score": None, "count": 0, "error": str(e)}
 
-
+@st.cache_data(ttl=60, show_spinner=False)
 def _fetch_validation_summary() -> dict:
     """Pull live validation stats from ERC-8004 Validation Registry."""
     if not _HAS_CHAIN or _CHAIN is None:
@@ -1601,7 +1602,8 @@ def _generate_synthetic_ohlcv(symbol: str, hours: int = 72) -> pd.DataFrame:
 def _try_fetch_live(symbol: str) -> pd.DataFrame | None:
     try:
         import ccxt
-        ex = ccxt.binance({"enableRateLimit": True, "timeout": 3000})
+        # disable rate limit sleeping so we fail fast instead of hanging the cloud thread
+        ex = ccxt.binance({"enableRateLimit": False, "timeout": 2000})
         ohlcv = ex.fetch_ohlcv(symbol, timeframe="1h", limit=72)
         df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
@@ -2300,7 +2302,7 @@ def _system_health_check():
     _t = time.perf_counter()
     try:
         import ccxt as _ccxt_hc  # noqa: F811
-        _ccxt_hc.binance({"enableRateLimit": True, "timeout": 2000}).fetch_ticker("ETH/USDT")
+        _ccxt_hc.binance({"enableRateLimit": False, "timeout": 1500}).fetch_ticker("ETH/USDT")
         checks["Binance Feed"] = ("📡", "LIVE", round((time.perf_counter() - _t) * 1000))
     except Exception:
         checks["Binance Feed"] = ("📡", "OFF", 0)
@@ -4736,17 +4738,32 @@ if st.session_state.get("autonomous_mode") and not st.session_state.get("kill_sw
 
         st.session_state["_last_auto_run"] = _now_ts
 
-    # Lightweight auto-refresh: show countdown, only reload when cycle is due.
-    # Uses a single JS timer instead of the old sleep(5)+rerun loop that
-    # flashed the Streamlit loader every 5 seconds.
+    # Lightweight auto-refresh: show countdown, only rerun when cycle is due.
+    # Uses a Streamlit component to trigger a soft rerun WITHOUT a full HTTP reload!
     _remaining = max(0, int(_auto_interval - (time.time() - st.session_state.get("_last_auto_run", 0))))
     _auto_ph = st.empty()
     _auto_ph.caption(f"⏱️ Next autonomous cycle in **{_remaining}s**")
     if _remaining <= 0:
         st.rerun()
     else:
+        # Use a hidden dummy form/button that gets submitted via JS 
+        # to trigger a clean Streamlit rerun without window.location.reload()
         import streamlit.components.v1 as _stc
         _stc.html(
-            f'<script>setTimeout(function(){{window.parent.location.reload()}},{_remaining*1000})</script>',
+            f'''
+            <script>
+            setTimeout(function() {{
+                const doc = window.parent.document;
+                const buttons = Array.from(doc.querySelectorAll('button'));
+                const autoBtn = buttons.find(b => b.innerText.includes("AUTO_TRIGGER"));
+                if (autoBtn) autoBtn.click();
+            }}, {_remaining * 1000});
+            </script>
+            ''',
             height=0,
         )
+        
+        # Hidden button for the JS to click
+        st.markdown('<div style="display:none">', unsafe_allow_html=True)
+        st.button("AUTO_TRIGGER", key="btn_auto_trigger")
+        st.markdown('</div>', unsafe_allow_html=True)
